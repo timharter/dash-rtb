@@ -1,0 +1,385 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: An AWS Serverless Application to demonstrates Cognito authentication with Amazon API Gateway WebSocket API. (uksb-1tthgi812) (tag:apigw-websocket-api-lambda-authorizer)
+Parameters:
+  ConnectionMappingTableName:
+    Type: String
+    Default: UnicornDashConnections
+    Description: The name of the new DynamoDB to store connection identifiers for
+      each connected clients. Minimum 3 characters.
+    MinLength: '3'
+    MaxLength: '50'
+    AllowedPattern: ^[A-Za-z_]+$
+  TrackingTableName:
+    Type: String
+    Default: UnicornDashTracking
+    Description: The name of the DynamoDB table to track each run.
+    MinLength: '3'
+    MaxLength: '50'
+    AllowedPattern: ^[A-Za-z_]+$
+Resources:
+
+ # API Gateway Websocket API, Deployment & Stage
+  UnicornDashWebSocketApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: UnicornDashWebSocket
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: $request.body.message
+      Tags:
+        auto-delete: "no"
+  Deployment:
+    Type: AWS::ApiGatewayV2::Deployment
+    DependsOn:
+      - ConnectRoute
+      - SendMessageRoute
+      - DisconnectRoute
+    Properties:
+      ApiId: !Ref 'UnicornDashWebSocketApi'
+  Stage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref 'UnicornDashWebSocketApi'
+      DeploymentId: !Ref 'Deployment'
+      StageName: Prod
+      Tags:
+        auto-delete: "no"
+
+ # Lambda functions for OnConnect, OnDisconnect, SendMessage
+  OnConnectFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: python3.11
+      Handler: app.connect_handler
+      CodeUri: ./src/websocket_api
+      MemorySize: 256
+      Timeout: 30
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref 'ConnectionMappingTableName'
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref 'ConnectionMappingTableName'
+      Tags:
+        auto-delete: "no"
+  OnDisconnectFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: python3.11
+      Handler: app.disconnect_handler
+      CodeUri: ./src/websocket_api
+      MemorySize: 256
+      Timeout: 30
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref 'ConnectionMappingTableName'
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref 'ConnectionMappingTableName'
+      Tags:
+        auto-delete: "no"
+  SendMessageFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: python3.11
+      Handler: app.send_message_handler
+      CodeUri: ./src/websocket_api
+      MemorySize: 256
+      Timeout: 30
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref 'ConnectionMappingTableName'
+        - DynamoDBCrudPolicy:
+            TableName: !Ref 'TrackingTableName'
+        - Statement:
+            Effect: Allow
+            Action: execute-api:ManageConnections
+            Resource: !Sub 
+            - arn:aws:execute-api:${region}:${accountId}:*/@connections/*
+            - region: !Ref 'AWS::Region'
+              accountId: !Ref 'AWS::AccountId'
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref 'ConnectionMappingTableName'
+          TRACKING_TABLE: !Ref 'TrackingTableName'
+      Tags:
+        auto-delete: "no"
+
+# Websocket API routes and integrations
+  ConnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref 'UnicornDashWebSocketApi'
+      RouteKey: $connect
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref 'LambdaAuthorizer'
+      OperationName: ConnectRoute
+      Target: !Join
+        - /
+        - - integrations
+          - !Ref 'ConnectInteg'
+  ConnectInteg:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref 'UnicornDashWebSocketApi'
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub
+        - arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${function}/invocations
+        - region: !Ref 'AWS::Region'
+          function: !GetAtt 'OnConnectFunction.Arn'
+  DisconnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref 'UnicornDashWebSocketApi'
+      RouteKey: $disconnect
+      AuthorizationType: NONE
+      OperationName: ConnectRoute
+      Target: !Join
+        - /
+        - - integrations
+          - !Ref 'DisconnectInteg'
+  DisconnectInteg:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref 'UnicornDashWebSocketApi'
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub
+        - arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${function}/invocations
+        - region: !Ref 'AWS::Region'
+          function: !GetAtt 'OnDisconnectFunction.Arn'
+  SendMessageRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref 'UnicornDashWebSocketApi'
+      RouteKey: sendmessage
+      AuthorizationType: NONE
+      OperationName: ConnectRoute
+      Target: !Join
+        - /
+        - - integrations
+          - !Ref 'SendMessageInteg'
+  SendMessageInteg:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref 'UnicornDashWebSocketApi'
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub
+        - arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${function}/invocations
+        - region: !Ref 'AWS::Region'
+          function: !GetAtt 'SendMessageFunction.Arn'
+
+# Grant API Gateway permissions to invoke these functions
+  OnConnectPermission:
+    Type: AWS::Lambda::Permission
+    DependsOn:
+      - UnicornDashWebSocketApi
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref 'OnConnectFunction'
+      Principal: apigateway.amazonaws.com
+  OnDisconnectPermission:
+    Type: AWS::Lambda::Permission
+    DependsOn:
+      - UnicornDashWebSocketApi
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref 'OnDisconnectFunction'
+      Principal: apigateway.amazonaws.com
+  SendMessagePermission:
+    Type: AWS::Lambda::Permission
+    DependsOn:
+      - UnicornDashWebSocketApi
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref 'SendMessageFunction'
+      Principal: apigateway.amazonaws.com
+ 
+ # DynamoDB table for storing connection identifiers
+  ConnectionMappingTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref 'ConnectionMappingTableName'
+      AttributeDefinitions:
+        - AttributeName: connectionId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: connectionId
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      Tags:
+        - Key: auto-delete
+          Value: "no"
+
+  TrackingTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref 'TrackingTableName'
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - Key: auto-delete
+          Value: "no"
+
+# Cognito User Pool for authentication
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: demo-userpool
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      UserPoolTags:
+        auto-delete: "no"
+
+# Cognito User Pool Client
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      SupportedIdentityProviders:
+        - COGNITO
+      ClientName: demo-userpool-client
+      UserPoolId: !Ref 'CognitoUserPool'
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_ADMIN_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+  
+  # Lambda function working as authorizer
+  LambdaAuthorizerHandler:
+    Type: AWS::Serverless::Function
+    Metadata:
+      Tool: Amazon.Lambda.Annotations
+    Properties:
+      Runtime: python3.11
+      Handler: authorizer.lambda_handler
+      CodeUri: ./src/authorizer
+      MemorySize: 1024
+      Timeout: 30
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Environment:
+        Variables:
+          COGNITO_USER_POOL_ID: !Ref CognitoUserPool
+          COGNITO_USER_POOL_CLIENT_ID: !Ref CognitoUserPoolClient
+      Tags:
+        auto-delete: "no"
+  # Grant API Gateway permissions to invoke this function
+  LambdaAuthorizerPermission:
+    Type: AWS::Lambda::Permission
+    DependsOn:
+      - UnicornDashWebSocketApi
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref 'LambdaAuthorizerHandler'
+      Principal: apigateway.amazonaws.com
+
+  # Authorizer for API Gateway (WebSocket API)
+  LambdaAuthorizer:
+    Type: AWS::ApiGatewayV2::Authorizer
+    Properties:
+      Name: LambdaAuthorizer
+      ApiId: !Ref 'UnicornDashWebSocketApi'
+      AuthorizerType: REQUEST
+      AuthorizerUri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaAuthorizerHandler.Arn}/invocations'
+      IdentitySource:
+        - route.request.querystring.ID_Token
+
+  # REST API Gateway for Report Submission
+  ReportRestApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: UnicornDashReportApi
+      StageName: Prod
+      Auth:
+        ApiKeyRequired: true
+        UsagePlan:
+          CreateUsagePlan: PER_API
+          Description: Usage plan for UnicornDash Report API
+          Throttle:
+            RateLimit: 100
+            BurstLimit: 200
+          Quota:
+            Limit: 20000
+            Period: DAY
+      Cors:
+        AllowMethods: "'POST,OPTIONS'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        AllowOrigin: "'*'"
+      Tags:
+        auto-delete: "no"
+
+  # Lambda function for handling report submissions
+  ReportSubmissionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: python3.11
+      Handler: app.lambda_handler
+      CodeUri: ./src/report_api
+      MemorySize: 256
+      Timeout: 30
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref 'ConnectionMappingTableName'
+        - DynamoDBWritePolicy:
+            TableName: !Ref 'ConnectionMappingTableName'
+        - Statement:
+            Effect: Allow
+            Action: execute-api:ManageConnections
+            Resource: !Sub 
+            - arn:aws:execute-api:${region}:${accountId}:${apiId}/@connections/*
+            - region: !Ref 'AWS::Region'
+              accountId: !Ref 'AWS::AccountId'
+              apiId: !Ref 'UnicornDashWebSocketApi'
+      Environment:
+        Variables:
+          WEBSOCKET_API_ID: !Ref 'UnicornDashWebSocketApi'
+          WEBSOCKET_STAGE: !Ref 'Stage'
+          CONNECTION_TABLE_NAME: !Ref 'ConnectionMappingTableName'
+      Events:
+        ReportSubmission:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ReportRestApi
+            Path: /report
+            Method: POST
+            Auth:
+              ApiKeyRequired: true
+      Tags:
+        auto-delete: "no"
+
+Outputs:
+  WebSocketURI:
+    Value: !Join
+      - ''
+      - - wss://
+        - !Ref 'UnicornDashWebSocketApi'
+        - .execute-api.
+        - !Ref 'AWS::Region'
+        - .amazonaws.com/
+        - !Ref 'Stage'
+    Description: The WSS Protocol URI to connect to
+  ReportApiEndpoint:
+    Value: !Sub 'https://${ReportRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/report'
+    Description: The REST API endpoint for submitting reports
+  ReportApiKeyId:
+    Value: !Ref ReportRestApiApiKey
+    Description: API Key ID for accessing the Report API (use 'aws apigateway get-api-key --api-key <id> --include-value' to get the actual key)
+  ReportApiKeyValue:
+    Value: !GetAtt ReportRestApiApiKey.Value
+    Description: API Key value for accessing the Report API
+  UserpoolId:
+    Value: !Ref CognitoUserPool
+    Description: Cognito UserPool Id
+  ClientId:
+    Value: !Ref CognitoUserPoolClient
+    Description: Cognito UserPool ClientId
