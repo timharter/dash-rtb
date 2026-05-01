@@ -10,6 +10,7 @@ interface StartLoadGenParams {
   devicesUsed?: string;
   numberOfJobs?: string;
   ratePerJob?: string;
+  rtbEnv?: string;
 }
 
 interface DualApiResult {
@@ -79,9 +80,10 @@ export async function stopLoadGen(config: LoadGenConfig) {
 }
 
 export async function startLoadGenDual(params: StartLoadGenParams = {}): Promise<DualApiResult> {
+  // Inject rtbEnv for each environment so the Lambda knows which target to use
   const results = await Promise.allSettled([
-    startLoadGen(LOADGEN_CONFIGS.heimdall, params),
-    startLoadGen(LOADGEN_CONFIGS.nlb, params)
+    startLoadGen(LOADGEN_CONFIGS.heimdall, { ...params, rtbEnv: 'heimdall' }),
+    startLoadGen(LOADGEN_CONFIGS.nlb, { ...params, rtbEnv: 'nlb' })
   ]);
 
   return {
@@ -127,7 +129,8 @@ export async function startLoadGenSingle(
   params: StartLoadGenParams = {}
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await startLoadGen(LOADGEN_CONFIGS[env], params);
+    // Always inject rtbEnv so the Lambda knows which target URL to use
+    await startLoadGen(LOADGEN_CONFIGS[env], { ...params, rtbEnv: env });
     return { success: true };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : String(e) };

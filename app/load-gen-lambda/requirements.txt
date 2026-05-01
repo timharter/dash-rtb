@@ -1,0 +1,3 @@
+boto3>=1.26.0
+botocore>=1.29.0
+eks-token>=0.3.0
