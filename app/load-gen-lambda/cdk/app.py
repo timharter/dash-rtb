@@ -21,7 +21,8 @@ LambdaHelmStack(
     target_heimdall=target_heimdall,
     ecr_repository_name=ecr_repository_name,
     cluster_name=cluster_name,
-    env=cdk.Environment(region=region)
+    env=cdk.Environment(region=region),
+    synthesizer=cdk.DefaultStackSynthesizer(qualifier="loadgen")
 )
 
 app.synth()
