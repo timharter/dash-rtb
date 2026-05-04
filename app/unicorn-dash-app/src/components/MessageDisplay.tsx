@@ -148,7 +148,7 @@ export function MessageDisplay({ socket }: MessageDisplayProps) {
       });
     };
 
-    const handleLoadGenReport = (env: 'heimdall' | 'nlb', data: any) => {
+    const handleLoadGenReport = async (env: 'heimdall' | 'nlb', data: any) => {
       if (raceState === RaceState.Pending) {
         // Mark prewarm complete for this environment
         setMetrics(prev => {
