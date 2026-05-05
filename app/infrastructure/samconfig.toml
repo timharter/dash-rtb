@@ -1,9 +1,9 @@
 version = 0.1
 [default.deploy.parameters]
-stack_name = "unicorn-app"
+stack_name = "dashboard-app"
 resolve_s3 = true
-s3_prefix = "unircorn-app"
+s3_prefix = "dashboard-app"
 region = "us-east-1"
 capabilities = "CAPABILITY_IAM"
-parameter_overrides = "ConnectionMappingTableName=\"UnicornDashConnections\" TrackingTableName=\"UnicornDashTracking\""
+parameter_overrides = "ConnectionMappingTableName=\"RTBDashConnections\" TrackingTableName=\"RTBDashTracking\""
 image_repositories = []

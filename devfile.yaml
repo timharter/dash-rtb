@@ -7,12 +7,12 @@ commands:
   - id: install
     exec:
       component: dev
-      commandLine: "cd app/unicorn-dash-app && npm install"
+      commandLine: "cd app/dashboard-app && npm install"
   - id: build
     exec:
       component: dev
-      commandLine: "cd app/unicorn-dash-app && npm run build && cp /app/pyinfra && sam validate --lint"
+      commandLine: "cd app/dashboard-app && npm run build && cp /app/pyinfra && sam validate --lint"
   - id: test
     exec:
       component: dev
-      commandLine: "cd app/unicorn-dash-app && npm run test && cp /app/pyinfra && sam build"
+      commandLine: "cd app/dashboard-app && npm run test && cp /app/pyinfra && sam build"

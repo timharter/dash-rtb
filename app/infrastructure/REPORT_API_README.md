@@ -1,4 +1,4 @@
-# UnicornDash Report API
+# RTBDash Report API
 
 This document describes the new REST API Gateway that allows external systems to submit reports in JSON format. When a report is submitted, it's automatically published to all connected WebSocket clients in real-time.
 

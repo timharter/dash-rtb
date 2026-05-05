@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Test script for the UnicornDash Report API
+# Test script for the RTBDash Report API
 # Usage: ./test_report_api.sh <api_endpoint> <api_key>
 
 set -e
@@ -37,7 +37,7 @@ REPORT_DATA=$(cat <<EOF
 EOF
 )
 
-echo "🚀 Testing UnicornDash Report API"
+echo "🚀 Testing RTBDash Report API"
 echo "=================================="
 echo "Endpoint: $API_ENDPOINT"
 echo "Timestamp: $TIMESTAMP"

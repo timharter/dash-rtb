@@ -1,10 +1,10 @@
-# UnicornDash
+# RTBDash
 
 A real-time dashboard application built with React and AWS serverless technologies, featuring WebSocket communication, Cognito authentication, and live data tracking.
 
 ## Project Overview
 
-UnicornDash is a serverless web application that demonstrates:
+RTBDash is a serverless web application that demonstrates:
 
 - **Real-time Communication**: WebSocket API for live data updates
 - **Authentication**: AWS Cognito user pool integration
@@ -17,7 +17,7 @@ UnicornDash is a serverless web application that demonstrates:
 The application consists of two main components:
 
 1. **Infrastructure** (`app/infrastructure/`): AWS SAM template defining serverless resources
-2. **Frontend** (`app/unicorn-dash-app/`): React web application with real-time features
+2. **Frontend** (`app/dashboard-app/`): React web application with real-time features
 
 ### AWS Resources
 
@@ -47,10 +47,10 @@ sam deploy --guided
 ```
 
 During the guided deployment, you can accept the default values or customize:
-- Stack name: `unicorn-app`
+- Stack name: `dashboard-app`
 - AWS Region: `us-east-1`
-- ConnectionMappingTableName: `UnicornDashConnections`
-- TrackingTableName: `UnicornDashTracking`
+- ConnectionMappingTableName: `RTBDashConnections`
+- TrackingTableName: `RTBDashTracking`
 
 After successful deployment, note the output values:
 - `WebSocketURI`: WebSocket endpoint URL
@@ -62,7 +62,7 @@ After successful deployment, note the output values:
 Configuration is handled through environment variables. Copy the example file and fill in the values from your SAM stack outputs:
 
 ```bash
-cd app/unicorn-dash-app
+cd app/dashboard-app
 cp .env.example .env
 ```
 
@@ -81,7 +81,7 @@ VITE_NLB_API_KEY=your-nlb-api-key
 You can retrieve the SAM stack outputs with:
 
 ```bash
-aws cloudformation describe-stacks --stack-name unicorn-app --query 'Stacks[0].Outputs'
+aws cloudformation describe-stacks --stack-name dashboard-app --query 'Stacks[0].Outputs'
 ```
 
 ### 3. Build and Run the React Application
@@ -89,7 +89,7 @@ aws cloudformation describe-stacks --stack-name unicorn-app --query 'Stacks[0].O
 Navigate to the React app directory:
 
 ```bash
-cd app/unicorn-dash-app
+cd app/dashboard-app
 ```
 
 Install dependencies:
@@ -121,12 +121,12 @@ The SAM configuration is defined in `app/infrastructure/samconfig.toml`:
 ```toml
 version = 0.1
 [default.deploy.parameters]
-stack_name = "unicorn-app"
+stack_name = "dashboard-app"
 resolve_s3 = true
-s3_prefix = "unircorn-app"
+s3_prefix = "dashboard-app"
 region = "us-east-1"
 capabilities = "CAPABILITY_IAM"
-parameter_overrides = "ConnectionMappingTableName=\"UnicornDashConnections\" TrackingTableName=\"UnicornDashTracking\""
+parameter_overrides = "ConnectionMappingTableName=\"RTBDashConnections\" TrackingTableName=\"RTBDashTracking\""
 ```
 
 ### React App Configuration
@@ -147,13 +147,13 @@ Key configuration files:
 ### Project Structure
 
 ```
-UnicornDash/
+RTBDash/
 ├── app/
 │   ├── infrastructure/          # AWS SAM infrastructure
 │   │   ├── src/                # Lambda function source code
 │   │   ├── template.yaml       # SAM template
 │   │   └── samconfig.toml      # SAM configuration
-│   └── unicorn-dash-app/       # React frontend application
+│   └── dashboard-app/       # React frontend application
 │       ├── src/                # React source code
 │       ├── public/             # Static assets
 │       └── package.json        # Node.js dependencies
@@ -188,7 +188,7 @@ UnicornDash/
 To retrieve the stack outputs after deployment:
 
 ```bash
-aws cloudformation describe-stacks --stack-name unicorn-app --query 'Stacks[0].Outputs'
+aws cloudformation describe-stacks --stack-name dashboard-app --query 'Stacks[0].Outputs'
 ```
 
 ## License
