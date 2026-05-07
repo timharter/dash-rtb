@@ -333,13 +333,13 @@ Resources:
         - DynamoDBWritePolicy:
             TableName: !Ref 'ConnectionMappingTableName'
         - Statement:
-            Effect: Allow
-            Action: execute-api:ManageConnections
-            Resource: !Sub 
-            - arn:aws:execute-api:${region}:${accountId}:${apiId}/@connections/*
-            - region: !Ref 'AWS::Region'
-              accountId: !Ref 'AWS::AccountId'
-              apiId: !Ref 'RTBDashWebSocketApi'
+            - Effect: Allow
+              Action: execute-api:ManageConnections
+              Resource: !Sub 
+              - arn:aws:execute-api:${region}:${accountId}:${apiId}/@connections/*
+              - region: !Ref 'AWS::Region'
+                accountId: !Ref 'AWS::AccountId'
+                apiId: !Ref 'RTBDashWebSocketApi'
       Environment:
         Variables:
           WEBSOCKET_API_ID: !Ref 'RTBDashWebSocketApi'
