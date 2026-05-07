@@ -245,6 +245,12 @@ export function MessageDisplay({ socket }: MessageDisplayProps) {
               setTimeout(() => {
                 setMetrics(prev => ({ ...prev, nlb: { ...prev.nlb, successMessage: null } }));
               }, 3000);
+              // Transition to ready after prewarm duration + buffer.
+              // The LoadGen report via WebSocket is unreliable when the bidder
+              // is not yet running — fall back to a fixed timeout.
+              setTimeout(() => {
+                setRaceState(prev => prev === RaceState.Pending ? RaceState.Ready : prev);
+              }, 20000);
             } else {
               console.error('Prewarm failed:', result.error);
             }
