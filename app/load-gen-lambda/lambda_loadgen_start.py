@@ -502,7 +502,7 @@ metadata:
   labels:
     {{- include "load-generator.labels" . | nindent 4 }}
 spec:
-  ttlSecondsAfterFinished: 10
+  ttlSecondsAfterFinished: 300
   parallelism: {{ .Values.numberOfJobs }}
   template:
     metadata:
