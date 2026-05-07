@@ -867,18 +867,25 @@ def deploy_helm_chart(chart_path: str, region: str, ecr_repository_name: str, du
         print(f"Using ECR registry: {ecr_registry}")
         print(f"Command: {' '.join(helm_command)}")
         
-        # Delete existing Job first — Kubernetes Jobs are immutable and helm
-        # upgrade cannot patch spec.template on an existing Job resource.
-        print("Deleting existing load-generator Job if present...")
+        # Uninstall existing release and delete Job — helm upgrade on an
+        # identical manifest does nothing (won't recreate a TTL-deleted Job).
+        # Uninstall + install guarantees a fresh Job every time.
+        print("Uninstalling existing load-generator release if present...")
+        subprocess.run(
+            ['helm', 'uninstall', 'load-generator'],
+            capture_output=True, text=True, timeout=30
+        )
         subprocess.run(
             ['kubectl', 'delete', 'job', 'load-generator', '--ignore-not-found'],
-            capture_output=True,
-            text=True,
-            timeout=30
+            capture_output=True, text=True, timeout=30
         )
         
+        # Use install (not upgrade --install) so helm always creates a fresh release
+        install_command = [c if c != 'upgrade' else 'install' for c in helm_command]
+        install_command = [c for c in install_command if c != '--install']
+        
         result = subprocess.run(
-            helm_command,
+            install_command,
             capture_output=True,
             text=True,
             check=True,
