@@ -857,6 +857,16 @@ def deploy_helm_chart(chart_path: str, region: str, ecr_repository_name: str, du
         print(f"Using ECR registry: {ecr_registry}")
         print(f"Command: {' '.join(helm_command)}")
         
+        # Delete existing Job first — Kubernetes Jobs are immutable and helm
+        # upgrade cannot patch spec.template on an existing Job resource.
+        print("Deleting existing load-generator Job if present...")
+        subprocess.run(
+            ['kubectl', 'delete', 'job', 'load-generator', '--ignore-not-found'],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
         result = subprocess.run(
             helm_command,
             capture_output=True,
