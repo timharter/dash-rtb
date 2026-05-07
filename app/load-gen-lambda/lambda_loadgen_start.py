@@ -98,6 +98,16 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 target = os.environ.get('TARGET_HEIMDALL')
                 if not target:
                     raise ValueError("TARGET_HEIMDALL environment variable is required when rtbEnv='heimdall' and no target parameter is provided")
+                # Validate the URL is well-formed — an empty SSP domain produces
+                # a malformed URL like "https:///link//bidrequest"
+                from urllib.parse import urlparse
+                parsed = urlparse(target)
+                if not parsed.netloc:
+                    raise ValueError(
+                        f"TARGET_HEIMDALL is not a valid URL ('{target}'). "
+                        "RTB Fabric (Heimdall) is not configured in this deployment — "
+                        "SSPDomain and LinkId CloudFormation exports are missing."
+                    )
             else:
                 raise ValueError(f"Invalid rtbEnv value: '{rtb_env}'. Must be 'nlb' or 'heimdall'")
         
