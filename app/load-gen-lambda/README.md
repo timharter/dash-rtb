@@ -76,7 +76,7 @@ curl -X POST https://your-api-gateway-url/start \
     "devicesUsed": "1000",
     "numberOfJobs": "1",
     "ratePerJob": "0",
-    "rtbEnv": "production"
+    "rtbEnv": "heimdall"
   }'
 ```
 
@@ -94,7 +94,7 @@ curl -X POST https://your-api-gateway-url/stop \
 ### Environment Variables
 
 **Start Lambda:**
-- `EKS_CLUSTER_NAME` - EKS cluster name
+- `EKS_CLUSTER_NAME` - EKS cluster name (required unless `cluster_name` is supplied in the event payload)
 - `EKS_REGION` - AWS region
 - `TARGET_NLB` - Target URL for NLB environment
 - `TARGET_HEIMDALL` - Target URL for Heimdall environment
@@ -103,19 +103,22 @@ curl -X POST https://your-api-gateway-url/stop \
 - `REPORT_API_KEY` - Report API key
 
 **Stop Lambda:**
-- `EKS_CLUSTER_NAME` - EKS cluster name
+- `EKS_CLUSTER_NAME` - EKS cluster name (required unless `cluster_name` is supplied in the event payload)
 - `EKS_REGION` - AWS region
 
 ### Event Parameters
 
 **Start Lambda accepts:**
-- `cluster_name` - Override cluster name
+- `cluster_name` - Override the EKS_CLUSTER_NAME env var (optional)
 - `target` - Override target URL (optional - if not provided, uses TARGET_NLB or TARGET_HEIMDALL based on rtbEnv)
 - `duration` - Test duration (default: "10m")
 - `devicesUsed` - Number of devices to simulate (default: "1000")
 - `numberOfJobs` - Number of parallel jobs (default: "1")
 - `ratePerJob` - Rate limiting per job (default: "0")
 - `rtbEnv` - RTB environment value (required - 'nlb' or 'heimdall')
+
+**Stop Lambda accepts:**
+- `cluster_name` - Override the EKS_CLUSTER_NAME env var (optional)
 
 ## Files
 

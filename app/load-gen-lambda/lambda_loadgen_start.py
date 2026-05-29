@@ -22,7 +22,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     AWS Lambda function to deploy Helm chart to EKS cluster
     
     Environment variables:
-    - EKS_CLUSTER_NAME: Name of the EKS cluster (optional - will auto-discover if not set)
+    - EKS_CLUSTER_NAME: Name of the EKS cluster (required)
     - EKS_REGION: AWS region (optional - defaults to AWS_REGION or us-east-1)
     - TARGET_NLB: Target URL for NLB environment (optional - can be overridden by event parameter)
     - TARGET_HEIMDALL: Target URL for Heimdall environment (optional - can be overridden by event parameter)
@@ -30,7 +30,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     - PATH: Must include /opt/bin for the layer binaries
     
     Event parameters:
-    - cluster_name: EKS cluster name (optional - overrides environment variable and auto-discovery)
+    - cluster_name: EKS cluster name (optional - overrides the EKS_CLUSTER_NAME env var)
     - target: Target URL for load testing (optional - overrides environment variable based on rtbEnv)
     - duration: Load test duration (optional - default: 10m, format: number + 'm')
     - numberOfJobs: Number of parallel jobs (optional - default: 1)
@@ -64,13 +64,13 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Use EKS_REGION first, then fall back to AWS_REGION (automatically set by Lambda), then default
         aws_region = os.environ.get('EKS_REGION') or os.environ.get('AWS_REGION', 'us-east-1')
         
-        # Get cluster name with priority: event > environment > auto-discovery
+        # Cluster name: event override first, then the EKS_CLUSTER_NAME env var
+        # (set at deploy time to the SSP cluster). No auto-discovery — fail fast
+        # if neither is provided.
         cluster_name = event.get('cluster_name') or os.environ.get('EKS_CLUSTER_NAME')
         if not cluster_name:
-            print("No cluster_name provided in event or EKS_CLUSTER_NAME environment variable, auto-discovering...")
-            cluster_name = get_eks_cluster_name(aws_region)
-        else:
-            print(f"Using specified cluster: {cluster_name}")
+            raise ValueError("cluster_name must be provided via event payload or the EKS_CLUSTER_NAME environment variable")
+        print(f"Using cluster: {cluster_name}")
         
         # Static chart path in writable /tmp directory
         chart_path = CHART_PATH
@@ -775,35 +775,6 @@ def validate_devices_count(devices: str) -> None:
         if "invalid literal" in str(e):
             raise ValueError(f"Invalid device count format: '{devices}'. Must be a number")
         raise
-
-def get_eks_cluster_name(region: str) -> str:
-    """Programmatically discover the EKS cluster name in the account"""
-    try:
-        print(f"Auto-discovering EKS clusters in region: {region}")
-        eks_client = boto3.client('eks', region_name=region)
-        
-        # List all clusters in the region
-        print("Calling EKS list_clusters API...")
-        response = eks_client.list_clusters()
-        clusters = response.get('clusters', [])
-        
-        print(f"Found {len(clusters)} EKS cluster(s): {clusters}")
-        
-        if len(clusters) == 0:
-            raise Exception("No EKS clusters found in the account")
-        elif len(clusters) == 1:
-            cluster_name = clusters[0]
-            print(f"✅ Auto-discovered single EKS cluster: {cluster_name}")
-            return cluster_name
-        else:
-            # Multiple clusters found, list them for reference
-            cluster_list = ', '.join(clusters)
-            print(f"❌ Multiple EKS clusters found ({len(clusters)}): {cluster_list}")
-            raise Exception(f"Multiple EKS clusters found ({len(clusters)}): {cluster_list}. Please specify cluster_name in event payload to choose which one to use.")
-        
-    except Exception as e:
-        print(f"❌ Failed to discover EKS cluster: {str(e)}")
-        raise Exception(f"Failed to discover EKS cluster: {str(e)}")
 
 def get_ecr_registry_url(region: str) -> str:
     """Get ECR registry URL for the current AWS account and region"""

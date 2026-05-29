@@ -114,9 +114,29 @@ def setup_kubectl_environment(kubeconfig_path: str) -> None:
 
 def lambda_handler(event, context):
     try:
-        # Get cluster name from environment
-        cluster_name = os.environ.get('EKS_CLUSTER_NAME')
-        region = os.environ.get('EKS_REGION')
+        # Handle API Gateway event format
+        if 'body' in event:
+            if event['body']:
+                try:
+                    event = json.loads(event['body'])
+                except json.JSONDecodeError as e:
+                    logger.error(f"Invalid JSON in request body: {e}")
+                    return {
+                        'statusCode': 400,
+                        'headers': {
+                            'Access-Control-Allow-Origin': '*',
+                            'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+                            'Access-Control-Allow-Methods': 'POST,OPTIONS'
+                        },
+                        'body': json.dumps({'error': f'Invalid JSON in request body: {e}'})
+                    }
+            else:
+                event = {}
+
+        # Cluster name: event override first, then the EKS_CLUSTER_NAME env var.
+        cluster_name = event.get('cluster_name') or os.environ.get('EKS_CLUSTER_NAME')
+        # Region: EKS_REGION, then AWS_REGION (set by Lambda), then default.
+        region = os.environ.get('EKS_REGION') or os.environ.get('AWS_REGION', 'us-east-1')
         
         if not cluster_name:
             return {
@@ -126,7 +146,7 @@ def lambda_handler(event, context):
                     'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
                     'Access-Control-Allow-Methods': 'POST,OPTIONS'
                 },
-                'body': json.dumps({'error': 'EKS_CLUSTER_NAME not configured'})
+                'body': json.dumps({'error': 'cluster_name must be provided via event payload or the EKS_CLUSTER_NAME environment variable'})
             }
         
         # Get EKS cluster info
