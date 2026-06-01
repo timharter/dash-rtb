@@ -12,7 +12,7 @@ import subprocess
 import os
 
 class LambdaHelmStack(Stack):
-    def __init__(self, scope: Construct, construct_id: str, target_nlb: str, target_heimdall: str,
+    def __init__(self, scope: Construct, construct_id: str, target_nlb: str, target_rtbfabric: str,
                  ecr_repository_name: str, cluster_name: str = None, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
@@ -65,7 +65,7 @@ class LambdaHelmStack(Stack):
             "EKS_REGION": self.region,
             "PATH": "/opt/bin:/usr/local/bin:/usr/bin/:/bin",
             "TARGET_NLB": target_nlb,
-            "TARGET_HEIMDALL": target_heimdall,
+            "TARGET_RTBFABRIC": target_rtbfabric,
             "ECR_REPOSITORY_NAME": ecr_repository_name,
             "REPORT_API_URL": self.node.try_get_context("report_api_url") or "",
             "REPORT_API_KEY": self.node.try_get_context("report_api_key") or ""
@@ -107,7 +107,7 @@ class LambdaHelmStack(Stack):
                 "PATH": "/opt/bin:/usr/local/bin:/usr/bin/:/bin",
                 "EKS_CLUSTER_NAME": cluster_name if cluster_name else "",
                 "TARGET_NLB": target_nlb,
-                "TARGET_HEIMDALL": target_heimdall
+                "TARGET_RTBFABRIC": target_rtbfabric
             }
         )
 

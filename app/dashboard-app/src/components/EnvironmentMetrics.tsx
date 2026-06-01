@@ -10,7 +10,7 @@ interface RaceReport {
 }
 
 interface EnvironmentMetricsProps {
-  environment: 'heimdall' | 'nlb';
+  environment: 'rtbfabric' | 'nlb';
   label: string;
   color: string;
   currentCount: number;

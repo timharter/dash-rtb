@@ -18,7 +18,7 @@ enum RaceState {
 
 enum RacePhase {
   Idle = 'idle',
-  Heimdall = 'heimdall',
+  RtbFabric = 'rtbfabric',
   NLB = 'nlb'
 }
 
@@ -49,10 +49,10 @@ export function MessageDisplay({ socket }: MessageDisplayProps) {
   const [raceState, setRaceState] = useState<RaceState>(RaceState.NotReady);
   const [racePhase, setRacePhase] = useState<RacePhase>(RacePhase.Idle);
   const [metrics, setMetrics] = useState<{
-    heimdall: EnvironmentMetricsState;
+    rtbfabric: EnvironmentMetricsState;
     nlb: EnvironmentMetricsState;
   }>({
-    heimdall: {
+    rtbfabric: {
       currentCount: 0,
       totalBidRequests: 0,
       prewarmBaseline: 0,
@@ -84,7 +84,7 @@ export function MessageDisplay({ socket }: MessageDisplayProps) {
         const data = JSON.parse(event.data);
         const env = data.data?.['rtb-env'] || data['rtb-env'];
 
-        if (!env || (env !== 'heimdall' && env !== 'nlb')) return;
+        if (!env || (env !== 'rtbfabric' && env !== 'nlb')) return;
 
         // LoadGen final report (has latencies, buckets, bytes_in, bytes_out, end)
         if (data.data?.latencies && data.data?.buckets && data.data?.bytes_in && data.data?.bytes_out && data.data?.end) {
@@ -101,7 +101,7 @@ export function MessageDisplay({ socket }: MessageDisplayProps) {
       }
     };
 
-    const handleMetricWatcher = (env: 'heimdall' | 'nlb', data: any) => {
+    const handleMetricWatcher = (env: 'rtbfabric' | 'nlb', data: any) => {
       let sum = 0;
       for (const [key, value] of Object.entries(data.data.metrics || {})) {
         if (key.startsWith('bidder_bid_request_received_number')) {
@@ -122,7 +122,7 @@ export function MessageDisplay({ socket }: MessageDisplayProps) {
       });
     };
 
-    const handleLoadGenReport = async (env: 'heimdall' | 'nlb', data: any) => {
+    const handleLoadGenReport = async (env: 'rtbfabric' | 'nlb', data: any) => {
       const report: RaceReport = {
         earliest: data.data.earliest,
         latest: data.data.latest,
@@ -143,17 +143,17 @@ export function MessageDisplay({ socket }: MessageDisplayProps) {
         });
         console.log('Prewarm complete, transitioning to Ready');
         setMetrics(prev => ({
-          heimdall: { ...prev.heimdall, currentCount: 0, prewarmComplete: false },
+          rtbfabric: { ...prev.rtbfabric, currentCount: 0, prewarmComplete: false },
           nlb: { ...prev.nlb, currentCount: 0, prewarmComplete: false }
         }));
         setRaceState(RaceState.Ready);
       } else if (raceState === RaceState.Running) {
-        if (env === 'heimdall' && racePhase === RacePhase.Heimdall) {
-          // Heimdall (Red) finished — store report, auto-start NLB (Blue)
-          console.log('Heimdall race complete, auto-starting NLB');
+        if (env === 'rtbfabric' && racePhase === RacePhase.RtbFabric) {
+          // RtbFabric (Red) finished — store report, auto-start NLB (Blue)
+          console.log('RtbFabric race complete, auto-starting NLB');
           setMetrics(prev => ({
             ...prev,
-            heimdall: { ...prev.heimdall, raceReport: report, raceComplete: true }
+            rtbfabric: { ...prev.rtbfabric, raceReport: report, raceComplete: true }
           }));
           setRacePhase(RacePhase.NLB);
 
@@ -206,12 +206,12 @@ export function MessageDisplay({ socket }: MessageDisplayProps) {
           marginLeft: '12px',
           padding: '4px 12px',
           borderRadius: '4px',
-          backgroundColor: racePhase === RacePhase.Heimdall ? '#fef3c7' : '#dbeafe',
-          color: racePhase === RacePhase.Heimdall ? '#92400e' : '#1e40af',
+          backgroundColor: racePhase === RacePhase.RtbFabric ? '#fef3c7' : '#dbeafe',
+          color: racePhase === RacePhase.RtbFabric ? '#92400e' : '#1e40af',
           fontWeight: 'bold',
           fontSize: '14px'
         }}>
-          Racing: {racePhase === RacePhase.Heimdall ? 'Red (RTB Fabric)' : 'Blue (NLB)'}
+          Racing: {racePhase === RacePhase.RtbFabric ? 'Red (RTB Fabric)' : 'Blue (NLB)'}
         </span>
       )}
 
@@ -221,7 +221,7 @@ export function MessageDisplay({ socket }: MessageDisplayProps) {
           disabled={raceState !== RaceState.NotReady}
           onClick={async () => {
             setMetrics(prev => ({
-              heimdall: { ...prev.heimdall, currentCount: 0, isLoading: true, error: null },
+              rtbfabric: { ...prev.rtbfabric, currentCount: 0, isLoading: true, error: null },
               nlb: { ...prev.nlb, currentCount: 0, isLoading: true, error: null }
             }));
             setRaceState(RaceState.Pending);
@@ -232,7 +232,7 @@ export function MessageDisplay({ socket }: MessageDisplayProps) {
             });
 
             setMetrics(prev => ({
-              heimdall: { ...prev.heimdall, isLoading: false },
+              rtbfabric: { ...prev.rtbfabric, isLoading: false },
               nlb: {
                 ...prev.nlb,
                 isLoading: false,
@@ -259,14 +259,14 @@ export function MessageDisplay({ socket }: MessageDisplayProps) {
           Prewarm
         </button>
 
-        {/* Start: kicks off Heimdall first; NLB auto-starts when Heimdall report arrives */}
+        {/* Start: kicks off RtbFabric first; NLB auto-starts when RtbFabric report arrives */}
         <button
           disabled={raceState !== RaceState.Ready}
           onClick={async () => {
             setMetrics(prev => ({
-              heimdall: {
-                ...prev.heimdall,
-                prewarmBaseline: prev.heimdall.totalBidRequests,
+              rtbfabric: {
+                ...prev.rtbfabric,
+                prewarmBaseline: prev.rtbfabric.totalBidRequests,
                 currentCount: 0,
                 isLoading: true,
                 error: null,
@@ -282,17 +282,17 @@ export function MessageDisplay({ socket }: MessageDisplayProps) {
               }
             }));
             setRaceState(RaceState.Running);
-            setRacePhase(RacePhase.Heimdall);
+            setRacePhase(RacePhase.RtbFabric);
 
-            const result = await startLoadGenSingle('heimdall', {
+            const result = await startLoadGenSingle('rtbfabric', {
               duration: '3m',
               devicesUsed: '1000'
             });
 
             setMetrics(prev => ({
               ...prev,
-              heimdall: {
-                ...prev.heimdall,
+              rtbfabric: {
+                ...prev.rtbfabric,
                 isLoading: false,
                 error: result.success ? null : `Start failed: ${result.error}`,
                 successMessage: result.success ? 'Race started' : null
@@ -301,10 +301,10 @@ export function MessageDisplay({ socket }: MessageDisplayProps) {
 
             if (result.success) {
               setTimeout(() => {
-                setMetrics(prev => ({ ...prev, heimdall: { ...prev.heimdall, successMessage: null } }));
+                setMetrics(prev => ({ ...prev, rtbfabric: { ...prev.rtbfabric, successMessage: null } }));
               }, 3000);
             } else {
-              console.error('Heimdall start failed:', result.error);
+              console.error('RtbFabric start failed:', result.error);
             }
           }}
         >
@@ -315,7 +315,7 @@ export function MessageDisplay({ socket }: MessageDisplayProps) {
         <button
           disabled={raceState !== RaceState.Running}
           onClick={async () => {
-            const activeEnv = racePhase === RacePhase.Heimdall ? 'heimdall' : 'nlb';
+            const activeEnv = racePhase === RacePhase.RtbFabric ? 'rtbfabric' : 'nlb';
             setMetrics(prev => ({
               ...prev,
               [activeEnv]: { ...prev[activeEnv], isLoading: true, error: null }
@@ -355,13 +355,13 @@ export function MessageDisplay({ socket }: MessageDisplayProps) {
             if (lastRaceCompletionTime && (now - lastRaceCompletionTime) > tenMinutes) {
               setRaceState(RaceState.NotReady);
               setMetrics(prev => ({
-                heimdall: { ...prev.heimdall, currentCount: 0, prewarmBaseline: 0, raceReport: null, raceComplete: false, error: null, isLoading: false, successMessage: null },
+                rtbfabric: { ...prev.rtbfabric, currentCount: 0, prewarmBaseline: 0, raceReport: null, raceComplete: false, error: null, isLoading: false, successMessage: null },
                 nlb: { ...prev.nlb, currentCount: 0, prewarmBaseline: 0, raceReport: null, raceComplete: false, error: null, isLoading: false, successMessage: null }
               }));
               lastRaceCompletionTime = null;
             } else {
               setMetrics(prev => ({
-                heimdall: { ...prev.heimdall, currentCount: 0, prewarmBaseline: prev.heimdall.totalBidRequests, raceReport: null, raceComplete: false },
+                rtbfabric: { ...prev.rtbfabric, currentCount: 0, prewarmBaseline: prev.rtbfabric.totalBidRequests, raceReport: null, raceComplete: false },
                 nlb: { ...prev.nlb, currentCount: 0, prewarmBaseline: prev.nlb.totalBidRequests, raceReport: null, raceComplete: false }
               }));
               setRaceState(RaceState.Ready);
@@ -374,15 +374,15 @@ export function MessageDisplay({ socket }: MessageDisplayProps) {
 
       <div style={{ display: 'flex', gap: '20px', marginTop: '20px' }}>
         <EnvironmentMetrics
-          environment="heimdall"
+          environment="rtbfabric"
           label="Red Car (RTB Fabric)"
           color="#dc2626"
-          currentCount={metrics.heimdall.currentCount}
-          totalBidRequests={metrics.heimdall.totalBidRequests}
-          raceReport={metrics.heimdall.raceReport}
-          error={metrics.heimdall.error}
-          isLoading={metrics.heimdall.isLoading}
-          successMessage={metrics.heimdall.successMessage}
+          currentCount={metrics.rtbfabric.currentCount}
+          totalBidRequests={metrics.rtbfabric.totalBidRequests}
+          raceReport={metrics.rtbfabric.raceReport}
+          error={metrics.rtbfabric.error}
+          isLoading={metrics.rtbfabric.isLoading}
+          successMessage={metrics.rtbfabric.successMessage}
         />
         <EnvironmentMetrics
           environment="nlb"

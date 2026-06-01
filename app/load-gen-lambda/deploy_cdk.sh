@@ -60,8 +60,8 @@ Commands:
   destroy   Destroy the CDK stack
 
 Deploy Options:
-  -n, --target-nlb URL          Target URL for NLB environment (required)
-  -h, --target-heimdall URL     Target URL for Heimdall environment (required)
+  --target-nlb URL              Target URL for NLB environment (required)
+  --target-rtbfabric URL        Target URL for RTB Fabric environment (required)
   -e, --ecr-repo NAME           ECR repository name (required)
   -c, --cluster NAME            EKS cluster name (required)
   -a, --report-api-url URL      Report API URL (required)
@@ -75,7 +75,7 @@ Destroy Options:
 Examples:
   $0 deploy \\
     --target-nlb http://nlb.example.com/bidrequest \\
-    --target-heimdall http://heimdall.example.com/bidrequest \\
+    --target-rtbfabric http://rtbfabric.example.com/bidrequest \\
     --ecr-repo load-gen \\
     --cluster my-eks-cluster \\
     --report-api-url https://api.example.com/report \\
@@ -90,7 +90,7 @@ EOF
 deploy_stack() {
     # Initialize variables
     TARGET_NLB=""
-    TARGET_HEIMDALL=""
+    TARGET_RTBFABRIC=""
     ECR_REPOSITORY_NAME=""
     CLUSTER_NAME=""
     REPORT_API_URL=""
@@ -100,12 +100,12 @@ deploy_stack() {
     # Parse flags
     while [[ $# -gt 0 ]]; do
         case $1 in
-            -n|--target-nlb)
+            --target-nlb)
                 TARGET_NLB="$2"
                 shift 2
                 ;;
-            -h|--target-heimdall)
-                TARGET_HEIMDALL="$2"
+            --target-rtbfabric)
+                TARGET_RTBFABRIC="$2"
                 shift 2
                 ;;
             -e|--ecr-repo)
@@ -137,7 +137,7 @@ deploy_stack() {
     done
 
     # Validate required arguments
-    if [[ -z "$TARGET_NLB" ]] || [[ -z "$TARGET_HEIMDALL" ]] || [[ -z "$ECR_REPOSITORY_NAME" ]] || [[ -z "$CLUSTER_NAME" ]] || [[ -z "$REPORT_API_URL" ]] || [[ -z "$REPORT_API_KEY" ]]; then
+    if [[ -z "$TARGET_NLB" ]] || [[ -z "$TARGET_RTBFABRIC" ]] || [[ -z "$ECR_REPOSITORY_NAME" ]] || [[ -z "$CLUSTER_NAME" ]] || [[ -z "$REPORT_API_URL" ]] || [[ -z "$REPORT_API_KEY" ]]; then
         log_error "Missing required arguments"
         show_usage
         exit 1
@@ -145,7 +145,7 @@ deploy_stack() {
 
     log_info "Deploying with CDK..."
     log_info "  Target NLB: $TARGET_NLB"
-    log_info "  Target Heimdall: $TARGET_HEIMDALL"
+    log_info "  Target RTB Fabric: $TARGET_RTBFABRIC"
     log_info "  ECR Repository: $ECR_REPOSITORY_NAME"
     log_info "  Cluster: $CLUSTER_NAME"
     log_info "  Region: $REGION"
@@ -173,7 +173,7 @@ deploy_stack() {
     pip install -r requirements.txt
 
     # Build context arguments
-    CONTEXT_ARGS="-c target_nlb=$TARGET_NLB -c target_heimdall=$TARGET_HEIMDALL -c ecr_repository_name=$ECR_REPOSITORY_NAME -c region=$REGION -c cluster_name=$CLUSTER_NAME -c report_api_url=$REPORT_API_URL -c report_api_key=$REPORT_API_KEY"
+    CONTEXT_ARGS="-c target_nlb=$TARGET_NLB -c target_rtbfabric=$TARGET_RTBFABRIC -c ecr_repository_name=$ECR_REPOSITORY_NAME -c region=$REGION -c cluster_name=$CLUSTER_NAME -c report_api_url=$REPORT_API_URL -c report_api_key=$REPORT_API_KEY"
 
     # Bootstrap CDK if needed
     log_info "Bootstrapping CDK environment..."
@@ -289,7 +289,7 @@ destroy_stack() {
     fi
     
     # Destroy CDK stack
-    cdk destroy --force --toolkit-stack-name CDKToolkit-Lambda-Loadgen -c region=$REGION -c target_nlb=dummy -c target_heimdall=dummy -c ecr_repository_name=dummy
+    cdk destroy --force --toolkit-stack-name CDKToolkit-Lambda-Loadgen -c region=$REGION -c target_nlb=dummy -c target_rtbfabric=dummy -c ecr_repository_name=dummy
     
     log_success "Stack destroyed successfully!"
 }

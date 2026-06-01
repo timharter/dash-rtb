@@ -25,7 +25,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     - EKS_CLUSTER_NAME: Name of the EKS cluster (required)
     - EKS_REGION: AWS region (optional - defaults to AWS_REGION or us-east-1)
     - TARGET_NLB: Target URL for NLB environment (optional - can be overridden by event parameter)
-    - TARGET_HEIMDALL: Target URL for Heimdall environment (optional - can be overridden by event parameter)
+    - TARGET_RTBFABRIC: Target URL for RTB Fabric environment (optional - can be overridden by event parameter)
     - ECR_REPOSITORY_NAME: Name for the Helm release (required)
     - PATH: Must include /opt/bin for the layer binaries
     
@@ -36,12 +36,12 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     - numberOfJobs: Number of parallel jobs (optional - default: 1)
     - devicesUsed: Number of devices to simulate (optional - default: 1000)
     - ratePerJob: Rate per job (optional - default: 0)
-    - rtbEnv: RTB environment value (required - 'nlb' or 'heimdall')
+    - rtbEnv: RTB environment value (required - 'nlb' or 'rtbfabric')
     """
     
     try:
         print(f"Received event: {event}")
-        print(f"Environment variables: ECR_REPOSITORY_NAME={os.environ.get('ECR_REPOSITORY_NAME')}, TARGET_NLB={os.environ.get('TARGET_NLB')}, TARGET_HEIMDALL={os.environ.get('TARGET_HEIMDALL')}")
+        print(f"Environment variables: ECR_REPOSITORY_NAME={os.environ.get('ECR_REPOSITORY_NAME')}, TARGET_NLB={os.environ.get('TARGET_NLB')}, TARGET_RTBFABRIC={os.environ.get('TARGET_RTBFABRIC')}")
         
         # Handle API Gateway event format
         if 'body' in event:
@@ -94,22 +94,22 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 target = os.environ.get('TARGET_NLB')
                 if not target:
                     raise ValueError("TARGET_NLB environment variable is required when rtbEnv='nlb' and no target parameter is provided")
-            elif rtb_env.lower() == 'heimdall':
-                target = os.environ.get('TARGET_HEIMDALL')
+            elif rtb_env.lower() == 'rtbfabric':
+                target = os.environ.get('TARGET_RTBFABRIC')
                 if not target:
-                    raise ValueError("TARGET_HEIMDALL environment variable is required when rtbEnv='heimdall' and no target parameter is provided")
+                    raise ValueError("TARGET_RTBFABRIC environment variable is required when rtbEnv='rtbfabric' and no target parameter is provided")
                 # Validate the URL is well-formed — an empty SSP domain produces
                 # a malformed URL like "https:///link//bidrequest"
                 from urllib.parse import urlparse
                 parsed = urlparse(target)
                 if not parsed.netloc:
                     raise ValueError(
-                        f"TARGET_HEIMDALL is not a valid URL ('{target}'). "
-                        "RTB Fabric (Heimdall) is not configured in this deployment — "
+                        f"TARGET_RTBFABRIC is not a valid URL ('{target}'). "
+                        "RTB Fabric is not configured in this deployment — "
                         "SSPDomain and LinkId CloudFormation exports are missing."
                     )
             else:
-                raise ValueError(f"Invalid rtbEnv value: '{rtb_env}'. Must be 'nlb' or 'heimdall'")
+                raise ValueError(f"Invalid rtbEnv value: '{rtb_env}'. Must be 'nlb' or 'rtbfabric'")
         
         # Get and validate duration parameter
         duration = event.get('duration', '10m')

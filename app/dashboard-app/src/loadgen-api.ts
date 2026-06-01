@@ -14,7 +14,7 @@ interface StartLoadGenParams {
 }
 
 interface DualApiResult {
-  heimdall: { success: boolean; error?: string };
+  rtbfabric: { success: boolean; error?: string };
   nlb: { success: boolean; error?: string };
 }
 
@@ -82,12 +82,12 @@ export async function stopLoadGen(config: LoadGenConfig) {
 export async function startLoadGenDual(params: StartLoadGenParams = {}): Promise<DualApiResult> {
   // Inject rtbEnv for each environment so the Lambda knows which target to use
   const results = await Promise.allSettled([
-    startLoadGen(LOADGEN_CONFIGS.heimdall, { ...params, rtbEnv: 'heimdall' }),
+    startLoadGen(LOADGEN_CONFIGS.rtbfabric, { ...params, rtbEnv: 'rtbfabric' }),
     startLoadGen(LOADGEN_CONFIGS.nlb, { ...params, rtbEnv: 'nlb' })
   ]);
 
   return {
-    heimdall: {
+    rtbfabric: {
       success: results[0].status === 'fulfilled',
       error: results[0].status === 'rejected' 
         ? (results[0].reason instanceof Error ? results[0].reason.message : String(results[0].reason))
@@ -104,12 +104,12 @@ export async function startLoadGenDual(params: StartLoadGenParams = {}): Promise
 
 export async function stopLoadGenDual(): Promise<DualApiResult> {
   const results = await Promise.allSettled([
-    stopLoadGen(LOADGEN_CONFIGS.heimdall),
+    stopLoadGen(LOADGEN_CONFIGS.rtbfabric),
     stopLoadGen(LOADGEN_CONFIGS.nlb)
   ]);
 
   return {
-    heimdall: {
+    rtbfabric: {
       success: results[0].status === 'fulfilled',
       error: results[0].status === 'rejected' 
         ? (results[0].reason instanceof Error ? results[0].reason.message : String(results[0].reason))
@@ -125,7 +125,7 @@ export async function stopLoadGenDual(): Promise<DualApiResult> {
 }
 
 export async function startLoadGenSingle(
-  env: 'heimdall' | 'nlb',
+  env: 'rtbfabric' | 'nlb',
   params: StartLoadGenParams = {}
 ): Promise<{ success: boolean; error?: string }> {
   try {
@@ -138,7 +138,7 @@ export async function startLoadGenSingle(
 }
 
 export async function stopLoadGenSingle(
-  env: 'heimdall' | 'nlb'
+  env: 'rtbfabric' | 'nlb'
 ): Promise<{ success: boolean; error?: string }> {
   try {
     await stopLoadGen(LOADGEN_CONFIGS[env]);

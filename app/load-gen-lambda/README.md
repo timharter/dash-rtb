@@ -32,7 +32,7 @@ API Gateway → Lambda Functions → EKS Cluster
 ```bash
 ./deploy_cdk.sh deploy \
   --target-nlb <target-nlb-url> \
-  --target-heimdall <target-heimdall-url> \
+  --target-rtbfabric <target-rtbfabric-url> \
   --ecr-repo <ecr-repo-name> \
   --cluster <cluster-name> \
   --report-api-url <report-api-url> \
@@ -42,8 +42,8 @@ API Gateway → Lambda Functions → EKS Cluster
 
 ### Deploy Options
 
-- `-n, --target-nlb` - Target URL for NLB environment (required)
-- `-h, --target-heimdall` - Target URL for Heimdall environment (required)
+- `--target-nlb` - Target URL for NLB environment (required)
+- `--target-rtbfabric` - Target URL for RTB Fabric environment (required)
 - `-e, --ecr-repo` - ECR repository name (required)
 - `-c, --cluster` - EKS cluster name (required)
 - `-a, --report-api-url` - Report API URL (required)
@@ -55,7 +55,7 @@ API Gateway → Lambda Functions → EKS Cluster
 ```bash
 ./deploy_cdk.sh deploy \
   --target-nlb http://nlb.example.com/bidrequest \
-  --target-heimdall http://heimdall.example.com/bidrequest \
+  --target-rtbfabric http://rtbfabric.example.com/bidrequest \
   --ecr-repo load-gen \
   --cluster publisher-eks \
   --report-api-url https://api.example.com/report \
@@ -76,7 +76,7 @@ curl -X POST https://your-api-gateway-url/start \
     "devicesUsed": "1000",
     "numberOfJobs": "1",
     "ratePerJob": "0",
-    "rtbEnv": "heimdall"
+    "rtbEnv": "rtbfabric"
   }'
 ```
 
@@ -97,7 +97,7 @@ curl -X POST https://your-api-gateway-url/stop \
 - `EKS_CLUSTER_NAME` - EKS cluster name (required unless `cluster_name` is supplied in the event payload)
 - `EKS_REGION` - AWS region
 - `TARGET_NLB` - Target URL for NLB environment
-- `TARGET_HEIMDALL` - Target URL for Heimdall environment
+- `TARGET_RTBFABRIC` - Target URL for RTB Fabric environment
 - `ECR_REPOSITORY_NAME` - ECR repository name
 - `REPORT_API_URL` - Report API URL
 - `REPORT_API_KEY` - Report API key
@@ -110,12 +110,12 @@ curl -X POST https://your-api-gateway-url/stop \
 
 **Start Lambda accepts:**
 - `cluster_name` - Override the EKS_CLUSTER_NAME env var (optional)
-- `target` - Override target URL (optional - if not provided, uses TARGET_NLB or TARGET_HEIMDALL based on rtbEnv)
+- `target` - Override target URL (optional - if not provided, uses TARGET_NLB or TARGET_RTBFABRIC based on rtbEnv)
 - `duration` - Test duration (default: "10m")
 - `devicesUsed` - Number of devices to simulate (default: "1000")
 - `numberOfJobs` - Number of parallel jobs (default: "1")
 - `ratePerJob` - Rate limiting per job (default: "0")
-- `rtbEnv` - RTB environment value (required - 'nlb' or 'heimdall')
+- `rtbEnv` - RTB environment value (required - 'nlb' or 'rtbfabric')
 
 **Stop Lambda accepts:**
 - `cluster_name` - Override the EKS_CLUSTER_NAME env var (optional)
