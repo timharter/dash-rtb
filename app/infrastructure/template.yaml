@@ -49,7 +49,7 @@ Resources:
   OnConnectFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Runtime: python3.11
+      Runtime: python3.14
       Handler: app.connect_handler
       CodeUri: ./src/websocket_api
       MemorySize: 256
@@ -65,7 +65,7 @@ Resources:
   OnDisconnectFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Runtime: python3.11
+      Runtime: python3.14
       Handler: app.disconnect_handler
       CodeUri: ./src/websocket_api
       MemorySize: 256
@@ -81,7 +81,7 @@ Resources:
   SendMessageFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Runtime: python3.11
+      Runtime: python3.14
       Handler: app.send_message_handler
       CodeUri: ./src/websocket_api
       MemorySize: 256
@@ -260,7 +260,7 @@ Resources:
     Metadata:
       Tool: Amazon.Lambda.Annotations
     Properties:
-      Runtime: python3.11
+      Runtime: python3.14
       Handler: authorizer.lambda_handler
       CodeUri: ./src/authorizer
       MemorySize: 1024
@@ -322,7 +322,7 @@ Resources:
   ReportSubmissionFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Runtime: python3.11
+      Runtime: python3.14
       Handler: app.lambda_handler
       CodeUri: ./src/report_api
       MemorySize: 256
