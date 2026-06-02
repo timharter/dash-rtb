@@ -23,7 +23,7 @@ API Gateway → Lambda Functions → EKS Cluster
 
 - AWS CLI configured
 - CDK CLI installed (`npm install -g aws-cdk`)
-- Python 3.13+
+- Python 3.14+
 - EKS cluster with appropriate permissions
 - ECR repository for container images
 

@@ -55,7 +55,8 @@ class LambdaHelmStack(Stack):
                 _lambda.Runtime.PYTHON_3_10,
                 _lambda.Runtime.PYTHON_3_11,
                 _lambda.Runtime.PYTHON_3_12,
-                _lambda.Runtime.PYTHON_3_13
+                _lambda.Runtime.PYTHON_3_13,
+                _lambda.Runtime.PYTHON_3_14
             ],
             description="kubectl and helm binaries for Lambda"
         )
@@ -78,7 +79,7 @@ class LambdaHelmStack(Stack):
         start_lambda_function = _lambda.Function(
             self, "StartSspLoadGen",
             function_name="start-ssp-load-gen",
-            runtime=_lambda.Runtime.PYTHON_3_13,
+            runtime=_lambda.Runtime.PYTHON_3_14,
             handler="lambda_loadgen_start.lambda_handler",
             code=_lambda.Code.from_asset(self._build_lambda_package()),
             role=lambda_role,
@@ -94,7 +95,7 @@ class LambdaHelmStack(Stack):
         stop_lambda_function = _lambda.Function(
             self, "StopSspLoadGen",
             function_name="stop-ssp-load-gen",
-            runtime=_lambda.Runtime.PYTHON_3_13,
+            runtime=_lambda.Runtime.PYTHON_3_14,
             handler="lambda_loadgen_stop.lambda_handler",
             code=_lambda.Code.from_asset(self._build_stop_lambda_package()),
             role=lambda_role,
