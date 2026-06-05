@@ -82,26 +82,29 @@ export function MessageDisplay({ socket }: MessageDisplayProps) {
     const handleMessage = (event: MessageEvent) => {
       try {
         const data = JSON.parse(event.data);
-        const env = data.data?.['rtb-env'] || data['rtb-env'];
 
-        if (!env || (env !== 'rtbfabric' && env !== 'nlb')) return;
-
-        // LoadGen final report (has latencies, buckets, bytes_in, bytes_out, end)
-        if (data.data?.latencies && data.data?.buckets && data.data?.bytes_in && data.data?.bytes_out && data.data?.end) {
-          handleLoadGenReport(env, data);
+        // Metric-watcher message. A single watcher scrapes the one shared bidder, so its
+        // reports carry no meaningful per-environment label. Attribute them to whichever
+        // route is currently under test — the race runs serially, one route at a time.
+        if (data.messageType === 'report' && data.data?.type === 'metrics' && data.data?.source === 'metric-watcher') {
+          handleMetricWatcher(data);
           return;
         }
 
-        // Metric-watcher message
-        if (data.messageType === 'report' && data.data?.type === 'metrics' && data.data?.source === 'metric-watcher') {
-          handleMetricWatcher(env, data);
+        // LoadGen final report (has latencies, buckets, bytes_in, bytes_out, end). The
+        // dashboard starts each run with a known env, so these stay routed by rtb-env.
+        const env = data.data?.['rtb-env'] || data['rtb-env'];
+        if (!env || (env !== 'rtbfabric' && env !== 'nlb')) return;
+
+        if (data.data?.latencies && data.data?.buckets && data.data?.bytes_in && data.data?.bytes_out && data.data?.end) {
+          handleLoadGenReport(env, data);
         }
       } catch (e) {
         console.log('Failed to parse message:', e);
       }
     };
 
-    const handleMetricWatcher = (env: 'rtbfabric' | 'nlb', data: any) => {
+    const handleMetricWatcher = (data: any) => {
       let sum = 0;
       for (const [key, value] of Object.entries(data.data.metrics || {})) {
         if (key.startsWith('bidder_bid_request_received_number')) {
@@ -110,12 +113,21 @@ export function MessageDisplay({ socket }: MessageDisplayProps) {
       }
 
       setMetrics(prev => {
-        const updated = { ...prev };
-        updated[env] = { ...updated[env], totalBidRequests: sum };
+        // One shared bidder backs both routes, so keep both panels' running total in sync
+        // with its cumulative count. This keeps the per-phase baselines (captured at Start
+        // and at the rtbfabric->nlb handoff) accurate regardless of which route is active.
+        const updated = {
+          rtbfabric: { ...prev.rtbfabric, totalBidRequests: sum },
+          nlb: { ...prev.nlb, totalBidRequests: sum }
+        };
 
-        if (raceState === RaceState.Running) {
-          const newCount = sum - updated[env].prewarmBaseline;
-          updated[env].currentCount = newCount;
+        // Only the route currently racing gets a live Current Count.
+        if (raceState === RaceState.Running && racePhase !== RacePhase.Idle) {
+          const activeEnv = racePhase === RacePhase.RtbFabric ? 'rtbfabric' : 'nlb';
+          updated[activeEnv] = {
+            ...updated[activeEnv],
+            currentCount: sum - updated[activeEnv].prewarmBaseline
+          };
         }
 
         return updated;
