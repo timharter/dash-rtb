@@ -377,10 +377,7 @@ Outputs:
     Description: The REST API endpoint for submitting reports
   ReportApiKeyId:
     Value: !Ref ReportRestApiApiKey
-    Description: API Key ID for accessing the Report API (use 'aws apigateway get-api-key --api-key <id> --include-value' to get the actual key)
-  ReportApiKeyValue:
-    Value: !GetAtt ReportRestApiApiKey.Value
-    Description: API Key value for accessing the Report API
+    Description: API Key ID for accessing the Report API. Retrieve the secret value with 'aws apigateway get-api-key --api-key <id> --include-value --query value --output text' (CloudFormation cannot expose the key value directly).
   UserpoolId:
     Value: !Ref CognitoUserPool
     Description: Cognito UserPool Id

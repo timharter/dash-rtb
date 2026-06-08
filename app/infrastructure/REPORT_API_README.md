@@ -104,7 +104,7 @@ sam deploy
 
 After deployment, retrieve the API endpoint and key from the CloudFormation outputs:
 - `ReportApiEndpoint`: The API endpoint URL
-- `ReportApiKey`: The API key for authentication
+- `ReportApiKeyId`: The API key ID. Retrieve the secret value with `aws apigateway get-api-key --api-key <id> --include-value --query value --output text`
 
 ## Error Handling
 
