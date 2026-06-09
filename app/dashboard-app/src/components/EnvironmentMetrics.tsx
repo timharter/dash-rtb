@@ -42,6 +42,7 @@ export default function EnvironmentMetrics({
         borderRadius: '8px',
         padding: '20px',
         backgroundColor,
+        color: '#1a1a1a',
         minWidth: '300px',
         position: 'relative'
       }}
