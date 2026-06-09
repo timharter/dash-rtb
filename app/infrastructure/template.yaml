@@ -340,7 +340,7 @@ Resources:
             - Effect: Allow
               Action: execute-api:ManageConnections
               Resource: !Sub 
-              - arn:aws:execute-api:${region}:${accountId}:${apiId}/@connections/*
+              - arn:aws:execute-api:${region}:${accountId}:${apiId}/*/POST/@connections/*
               - region: !Ref 'AWS::Region'
                 accountId: !Ref 'AWS::AccountId'
                 apiId: !Ref 'RTBDashWebSocketApi'
