@@ -75,7 +75,8 @@ curl -X POST https://your-api-gateway-url/start \
     "duration": "10m",
     "devicesUsed": "1000",
     "numberOfJobs": "1",
-    "ratePerJob": "0",
+    "ratePerJob": "1000",
+    "workers": "200",
     "rtbEnv": "rtbfabric"
   }'
 ```
@@ -114,7 +115,8 @@ curl -X POST https://your-api-gateway-url/stop \
 - `duration` - Test duration (default: "10m")
 - `devicesUsed` - Number of devices to simulate (default: "1000")
 - `numberOfJobs` - Number of parallel jobs (default: "1")
-- `ratePerJob` - Rate limiting per job (default: "0")
+- `ratePerJob` - Rate limiting per job (default: "1000")
+- `workers` - Number of concurrent workers per job (default: "200")
 - `rtbEnv` - RTB environment value (required - 'nlb' or 'rtbfabric')
 
 **Stop Lambda accepts:**

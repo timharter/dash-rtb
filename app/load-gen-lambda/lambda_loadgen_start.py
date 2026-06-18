@@ -35,7 +35,8 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     - duration: Load test duration (optional - default: 10m, format: number + 'm')
     - numberOfJobs: Number of parallel jobs (optional - default: 1)
     - devicesUsed: Number of devices to simulate (optional - default: 1000)
-    - ratePerJob: Rate per job (optional - default: 0)
+    - ratePerJob: Rate per job (optional - default: 1000)
+    - workers: Number of concurrent workers per job (optional - default: 200)
     - rtbEnv: RTB environment value (required - 'nlb' or 'rtbfabric')
     """
     
@@ -151,7 +152,8 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             duration=duration,
             numberOfJobs=event.get('numberOfJobs', '1'),
             devicesUsed=devices_used,
-            ratePerJob=event.get('ratePerJob', '0'),
+            ratePerJob=event.get('ratePerJob', '1000'),
+            workers=event.get('workers', '200'),
             target=target,
             rtb_env=rtb_env
         )
@@ -793,7 +795,7 @@ def get_ecr_registry_url(region: str) -> str:
         raise Exception(f"Failed to get ECR registry URL: {str(e)}")
 
 def deploy_helm_chart(chart_path: str, region: str, ecr_repository_name: str, duration: str, 
-                      numberOfJobs: str, devicesUsed: str, ratePerJob: str, target: str, rtb_env: str = '') -> None:
+                      numberOfJobs: str, devicesUsed: str, ratePerJob: str, workers: str, target: str, rtb_env: str = '') -> None:
     """Deploy Helm chart with specified configuration"""
     
     # Get ECR registry URL programmatically
@@ -804,6 +806,7 @@ def deploy_helm_chart(chart_path: str, region: str, ecr_repository_name: str, du
     print(f"  numberOfJobs: {numberOfJobs}")
     print(f"  devicesUsed: {devicesUsed}")
     print(f"  ratePerJob: {ratePerJob}")
+    print(f"  workers: {workers}")
     print(f"  target: {target}")
     print(f"  image.repository: {ecr_repository_name}")
     print(f"  rtbEnv: {rtb_env}")
@@ -820,6 +823,7 @@ def deploy_helm_chart(chart_path: str, region: str, ecr_repository_name: str, du
         '--set', f'numberOfJobs={numberOfJobs}',
         '--set', f'devicesUsed={devicesUsed}',
         '--set', f'ratePerJob={ratePerJob}',
+        '--set', f'workers={workers}',
         '--set', f'target={target}',
         # '--set', 'profilerOutput=2025-08-13T15:07-Basic/pprof-{{.Endpoint}}-{{.Hostname}}',
         '--set', 'image.tag=latest',

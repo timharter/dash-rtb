@@ -10,6 +10,7 @@ interface StartLoadGenParams {
   devicesUsed?: string;
   numberOfJobs?: string;
   ratePerJob?: string;
+  workers?: string;
   rtbEnv?: string;
 }
 
@@ -23,7 +24,8 @@ export async function startLoadGen(config: LoadGenConfig, params: StartLoadGenPa
     duration: '10m',
     devicesUsed: '1000',
     numberOfJobs: '1',
-    ratePerJob: '0'
+    ratePerJob: '1000',
+    workers: '200'
   };
 
   const requestBody = { ...defaultParams, ...params };
