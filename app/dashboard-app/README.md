@@ -1,50 +1,36 @@
-# React + TypeScript + Vite
+# RTB Fabric Comparison Dashboard (frontend)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Svelte + Vite + uPlot single-page app for the live NLB-vs-RTB-Fabric latency
+comparison. It is served under `/dash/` by the Go dashboard service
+(`guidance-rtb/tools/rtb-dashboard`), which embeds this build output at image
+build time.
 
-Currently, two official plugins are available:
+## How it works
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Subscribes to `GET /dash/stream` (Server-Sent Events) for `live-metrics`,
+  `report`, `readiness`, `run-state`, and `backend-health` events.
+- Drives runs via `POST /dash/verify`, `/dash/run`, `/dash/stop`.
+- Embeds the workshop terminal (ttyd at the distribution root) in an iframe.
+- Contains no secrets or API keys — authentication is enforced at the
+  CloudFront edge, and ingestion/control endpoints are same-origin.
 
-## Expanding the ESLint configuration
+## Develop
 
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
-
-- Configure the top-level `parserOptions` property like this:
-
-```js
-export default tseslint.config({
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```bash
+npm install
+# Point the dev proxy at a running dashboard service (default localhost:8080):
+DASH_DEV_BACKEND=http://localhost:8080 npm run dev
 ```
 
-- Replace `tseslint.configs.recommended` to `tseslint.configs.recommendedTypeChecked` or `tseslint.configs.strictTypeChecked`
-- Optionally add `...tseslint.configs.stylisticTypeChecked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and update the config:
+The app is served at `http://localhost:5173/dash/`. The embedded terminal
+(`iframe src="/"`) only resolves behind the unified CloudFront distribution.
 
-```js
-// eslint.config.js
-import react from 'eslint-plugin-react'
+## Build / type-check
 
-export default tseslint.config({
-  // Set the react version
-  settings: { react: { version: '18.3' } },
-  plugins: {
-    // Add the react plugin
-    react,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended rules
-    ...react.configs.recommended.rules,
-    ...react.configs['jsx-runtime'].rules,
-  },
-})
+```bash
+npm run build   # svelte-check + vite build -> dist/
+npm run check   # type-check only
 ```
+
+`vite build` emits to `dist/` with base `/dash/`; the service's container build
+copies it into the embedded asset directory.
