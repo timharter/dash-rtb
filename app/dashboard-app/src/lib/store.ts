@@ -56,6 +56,9 @@ export const tick = writable(0)
 export const busy = writable<'verify' | 'run' | 'stop' | null>(null)
 export const actionError = writable<string | null>(null)
 
+/** Whether the CloudShell-style terminal overlay is open. UI-only state. */
+export const terminalOpen = writable(false)
+
 /** True while any environment is actively running. */
 export const isRunning: Readable<boolean> = derived(runState, ($rs) => {
   if (!$rs) return false

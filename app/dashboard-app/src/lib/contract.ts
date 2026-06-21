@@ -15,7 +15,7 @@ export interface ReadinessEvent {
   reasons?: Record<string, string>
 }
 
-export type RunStatus = 'idle' | 'running' | 'complete' | 'failed'
+export type RunStatus = 'idle' | 'running' | 'complete' | 'failed' | 'stopped'
 
 export interface RunEnvState {
   status: RunStatus

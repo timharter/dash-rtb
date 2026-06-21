@@ -78,6 +78,7 @@
     running: 'running',
     complete: 'complete',
     failed: 'failed',
+    stopped: 'stopped',
   }
   // Surface the current run's mode and per-environment status so a failed or
   // one-sided run is never silently shown as a complete comparison
@@ -329,6 +330,11 @@
   }
   .run-badge.complete {
     color: var(--text);
+  }
+  .run-badge.stopped {
+    color: var(--warn);
+    border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+    background: color-mix(in srgb, var(--warn) 10%, transparent);
   }
   .run-badge.failed {
     color: var(--bad);

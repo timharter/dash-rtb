@@ -5,6 +5,7 @@
     disconnectStream,
     connection,
     isRunning,
+    terminalOpen,
   } from './lib/store'
   import { ENVS, ENV_TOKENS, FIXED_PARAMS, formatRate } from './lib/contract'
   import Controls from './lib/Controls.svelte'
@@ -38,6 +39,17 @@
     </div>
 
     <div class="topbar-right">
+      <button
+        class="term-launch"
+        class:active={$terminalOpen}
+        onclick={() => terminalOpen.update((v) => !v)}
+        aria-pressed={$terminalOpen}
+        title="Open the workshop terminal"
+      >
+        <span class="term-launch-glyph" aria-hidden="true">›_</span>
+        Terminal
+      </button>
+
       <div class="legend">
         {#each ENVS as env (env)}
           <span class="env-chip">
@@ -130,6 +142,24 @@
   .legend {
     display: flex;
     gap: 14px;
+  }
+
+  .term-launch {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 7px 14px;
+  }
+  .term-launch-glyph {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-weight: 700;
+    color: var(--env-rtbfabric);
+  }
+  .term-launch.active {
+    border-color: var(--env-rtbfabric);
+    background: color-mix(in srgb, var(--env-rtbfabric) 18%, var(--bg-panel-2));
   }
 
   .conn {
