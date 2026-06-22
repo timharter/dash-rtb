@@ -34,48 +34,110 @@
   {#if !view.any}
     <div class="idle-state">Tail and error metrics appear once a run is producing samples.</div>
   {:else}
-    <div class="grid">
-      <div class="hcell metric-head"></div>
-      {#each ENVS as env (env)}
-        <div class="hcell">
-          <span class="env-chip"><span class="env-swatch {env}"></span>{ENV_TOKENS[env].label}</span>
+    <div class="tail-table">
+      <div class="trow thead">
+        <span class="tlabel"></span>
+        <span class="tfill"></span>
+        <div class="tvals">
+          {#each ENVS as env (env)}
+            <span class="tval">
+              <span class="env-chip"><span class="env-swatch {env}"></span>{ENV_TOKENS[env].label}</span>
+            </span>
+          {/each}
         </div>
-      {/each}
+      </div>
 
       {#each rows as r (r.key)}
-        <div class="metric-name">{r.label}</div>
-        {#each ENVS as env (env)}
-          <div class="value" class:warn={r.key !== 'max' && view[env].hasData && view[env][r.key] > 0}>
-            {cell(env, r.key)}
+        <div class="trow metric">
+          <span class="tlabel">{r.label}</span>
+          <span class="tdots" aria-hidden="true"></span>
+          <div class="tvals">
+            {#each ENVS as env (env)}
+              <span
+                class="tval"
+                class:warn={r.key !== 'max' && view[env].hasData && view[env][r.key] > 0}
+              >
+                {cell(env, r.key)}
+              </span>
+            {/each}
           </div>
-        {/each}
+        </div>
       {/each}
     </div>
   {/if}
 </section>
 
 <style>
-  .grid {
-    display: grid;
-    grid-template-columns: 1.4fr 1fr 1fr;
-    gap: 8px 16px;
+  .tail-table {
+    display: flex;
+    flex-direction: column;
+  }
+  .trow {
+    display: flex;
     align-items: center;
+    gap: 12px;
+    padding: 5px 8px;
+    border-radius: 5px;
   }
-  .hcell {
-    padding-bottom: 6px;
+  .trow.metric:hover {
+    background: var(--bg-panel-2);
+  }
+  .thead {
     border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    padding-bottom: 8px;
+    margin-bottom: 4px;
   }
-  .metric-name {
+
+  .tlabel {
+    flex: 0 0 auto;
     color: var(--text-dim);
     font-size: 0.9rem;
+    white-space: nowrap;
   }
-  .value {
+  /* Header spacer (no dots) keeps the value columns aligned with the rows below. */
+  .tfill {
+    flex: 1 1 auto;
+    min-width: 18px;
+  }
+  /* Dotted leader connecting each metric label to its values. */
+  .tdots {
+    flex: 1 1 auto;
+    min-width: 18px;
+    height: 1px;
+    background-image: radial-gradient(circle, var(--text-faint) 1px, transparent 1.5px);
+    background-size: 6px 2px;
+    background-repeat: repeat-x;
+    background-position: 0 center;
+    opacity: 0.5;
+  }
+
+  .tvals {
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: 120px 120px;
+    gap: 0 28px;
+    align-items: center;
+  }
+  .tval {
     text-align: right;
     font-variant-numeric: tabular-nums;
     font-weight: 600;
     font-size: 1.05rem;
   }
-  .value.warn {
+  /* The header cells hold the env legend chip, not a number. */
+  .thead .tval {
+    font-weight: 600;
+    font-size: 0.9rem;
+  }
+  .tval.warn {
     color: var(--warn);
+  }
+
+  @media (max-width: 720px) {
+    .tvals {
+      grid-template-columns: 84px 84px;
+      gap: 0 16px;
+    }
   }
 </style>
