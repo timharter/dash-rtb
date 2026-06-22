@@ -1,6 +1,6 @@
 <script lang="ts">
   import { backendHealth } from './store'
-  import { ENVS, ENV_TOKENS, formatInt, type RtbEnv, type BackendHealthMessage } from './contract'
+  import { ENVS, ENV_TOKENS, formatInt, type BackendHealthMessage } from './contract'
 
   // Backend-health is optional supporting context sourced from metric-watcher
   // (bidder-side Prometheus). It is intentionally secondary to the client-
@@ -104,10 +104,6 @@
     }
     return out
   }
-
-  function envOf(e: RtbEnv): BackendHealthMessage {
-    return $backendHealth[e] as BackendHealthMessage
-  }
 </script>
 
 <section class="panel backend">
@@ -123,7 +119,7 @@
   {:else}
     <div class="bh-grid">
       {#each envsWithData as env (env)}
-        {@const agg = aggregate(envOf(env))}
+        {@const agg = aggregate($backendHealth[env] as BackendHealthMessage)}
         <div class="bh-card">
           <div class="bh-card-head">
             <span class="env-chip"><span class="env-swatch {env}"></span>{ENV_TOKENS[env].label}</span>
