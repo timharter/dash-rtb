@@ -47,22 +47,24 @@
         </div>
       </div>
 
-      {#each rows as r (r.key)}
-        <div class="trow metric">
-          <span class="tlabel">{r.label}</span>
-          <span class="tdots" aria-hidden="true"></span>
-          <div class="tvals">
-            {#each ENVS as env (env)}
-              <span
-                class="tval"
-                class:warn={r.key !== 'max' && view[env].hasData && view[env][r.key] > 0}
-              >
-                {cell(env, r.key)}
-              </span>
-            {/each}
+      <div class="tbody">
+        {#each rows as r (r.key)}
+          <div class="trow">
+            <span class="tlabel">{r.label}</span>
+            <span class="tfill"></span>
+            <div class="tvals">
+              {#each ENVS as env (env)}
+                <span
+                  class="tval"
+                  class:warn={r.key !== 'max' && view[env].hasData && view[env][r.key] > 0}
+                >
+                  {cell(env, r.key)}
+                </span>
+              {/each}
+            </div>
           </div>
-        </div>
-      {/each}
+        {/each}
+      </div>
     </div>
   {/if}
 </section>
@@ -77,9 +79,13 @@
     align-items: center;
     gap: 12px;
     padding: 5px 8px;
-    border-radius: 5px;
+    border-radius: 4px;
   }
-  .trow.metric:hover {
+  /* Zebra striping for easy row tracing; hover wins over the stripe. */
+  .tbody .trow:nth-child(even) {
+    background: color-mix(in srgb, var(--text) 4%, transparent);
+  }
+  .tbody .trow:hover {
     background: var(--bg-panel-2);
   }
   .thead {
@@ -95,21 +101,10 @@
     font-size: 0.9rem;
     white-space: nowrap;
   }
-  /* Header spacer (no dots) keeps the value columns aligned with the rows below. */
+  /* Flexible spacer pushes the value columns to the right, aligned across rows. */
   .tfill {
     flex: 1 1 auto;
     min-width: 18px;
-  }
-  /* Dotted leader connecting each metric label to its values. */
-  .tdots {
-    flex: 1 1 auto;
-    min-width: 18px;
-    height: 1px;
-    background-image: radial-gradient(circle, var(--text-faint) 1px, transparent 1.5px);
-    background-size: 6px 2px;
-    background-repeat: repeat-x;
-    background-position: 0 center;
-    opacity: 0.5;
   }
 
   .tvals {

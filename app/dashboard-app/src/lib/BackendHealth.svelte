@@ -130,19 +130,28 @@
             {/if}
           </div>
           {#if noBidRate(agg)}
-            <div class="bh-row highlight">
-              <span class="bh-label">No-bid rate</span>
-              <span class="bh-dots" aria-hidden="true"></span>
-              <span class="bh-value">{noBidRate(agg)}</span>
+            <div class="bh-rows">
+              <div class="bh-row highlight">
+                <span class="bh-label">No-bid rate</span>
+                <span class="bh-value">{noBidRate(agg)}</span>
+              </div>
+              {#each rows(agg) as row (row.label)}
+                <div class="bh-row">
+                  <span class="bh-label">{row.label}</span>
+                  <span class="bh-value">{row.value}</span>
+                </div>
+              {/each}
+            </div>
+          {:else}
+            <div class="bh-rows">
+              {#each rows(agg) as row (row.label)}
+                <div class="bh-row">
+                  <span class="bh-label">{row.label}</span>
+                  <span class="bh-value">{row.value}</span>
+                </div>
+              {/each}
             </div>
           {/if}
-          {#each rows(agg) as row (row.label)}
-            <div class="bh-row">
-              <span class="bh-label">{row.label}</span>
-              <span class="bh-dots" aria-hidden="true"></span>
-              <span class="bh-value">{row.value}</span>
-            </div>
-          {/each}
         </div>
       {/each}
     </div>
@@ -199,37 +208,32 @@
     border-color: color-mix(in srgb, var(--bad) 55%, transparent);
     background: color-mix(in srgb, var(--bad) 12%, transparent);
   }
+  .bh-rows {
+    display: flex;
+    flex-direction: column;
+  }
   .bh-row {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    justify-content: space-between;
+    gap: 12px;
     font-size: 0.85rem;
     padding: 5px 8px;
-    border-radius: 5px;
+    border-radius: 4px;
   }
-  .bh-row:hover {
+  /* Zebra striping for easy row tracing; hover wins over the stripe. */
+  .bh-rows .bh-row:nth-child(even) {
+    background: color-mix(in srgb, var(--text) 4%, transparent);
+  }
+  .bh-rows .bh-row:hover {
     background: var(--bg-panel-2);
   }
   .bh-label {
     color: var(--text-dim);
     text-transform: capitalize;
-    white-space: nowrap;
-  }
-  /* Dotted leader connecting each label to its value across the row. */
-  .bh-dots {
-    flex: 1 1 auto;
-    min-width: 18px;
-    height: 1px;
-    background-image: radial-gradient(circle, var(--text-faint) 1px, transparent 1.5px);
-    background-size: 6px 2px;
-    background-repeat: repeat-x;
-    background-position: 0 center;
-    opacity: 0.5;
   }
   .bh-value {
     font-variant-numeric: tabular-nums;
     font-weight: 600;
-    white-space: nowrap;
   }
   .bh-row.highlight .bh-value {
     color: var(--text);
