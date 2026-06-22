@@ -139,7 +139,7 @@ The existing `CloudFrontDistribution` has one origin (`workshop-origin` = EC2 ng
 - **Single edge auth.** Move the human gate to a CloudFront Function (viewer-request Basic-Auth) covering the whole distribution, and remove ttyd/nginx's own `auth_basic` so participants aren't prompted twice (Requirement 9.7). Both origins then trust edge-authorized requests. The dashboard's machine endpoints (`/ingest`) are in-cluster only and not exposed through CloudFront.
 - **Frame-ancestors.** Since the terminal (root) is framed by the dashboard (`/dash/`) on the same origin, set `Content-Security-Policy: frame-ancestors 'self'` (via response headers) so it can only be embedded by its own origin (anti-clickjacking, Requirement 9.2). The EC2 security group stays locked to the CloudFront prefix list (Requirement 9.5).
 
-The `RTBDashURL` output (`/dash/`) and `TerminalURL` (`/`) already match this layout; the workshop publishes the single CloudFront URL (Requirement 9.5 / single-URL goal).
+The `RTBDashURL` output (`/dash/`) maps to this layout, with the terminal served at root (`/`) and framed by the dashboard; the workshop publishes the single CloudFront URL (Requirement 9.5 / single-URL goal).
 
 ### 5. Build, deploy, and legacy retirement (Requirement 11)
 
@@ -168,7 +168,7 @@ This template is the deployment backbone — Workshop Studio provisions everythi
 
 **Terminal nginx (`TerminalSSMDocument` → `ConfigureNginx`).** Remove the `auth_basic` / `.htpasswd` block so the single edge gate isn't doubled. ttyd stays at root, no base-path change.
 
-**Outputs.** Keep `RTBDashURL` (`/dash/`) and `TerminalURL` (`/`); remove `LoadGenApiNote` (references the retired `LambdaHelmStack`).
+**Outputs.** Expose only the RTBDash credentials — `RTBDashURL` (`/dash/`), `RTBDashUsername`, and `RTBDashPassword`; drop the redundant `TerminalURL`/`TerminalUsername`/`TerminalPassword` outputs (the terminal is embedded in the dashboard and shares the single edge Basic-Auth credential). Also remove `LoadGenApiNote` (references the retired `LambdaHelmStack`).
 
 ## Backend-Health Panel (Requirement 12)
 
