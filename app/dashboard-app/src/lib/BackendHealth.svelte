@@ -108,8 +108,19 @@
 
 <section class="panel backend">
   <div class="bh-head">
-    <h2>Backend health · bidder</h2>
-    <span class="faint">Supporting context — same backend across both paths; the data path is the variable.</span>
+    <div class="bh-title">
+      <h2>Backend health · bidder</h2>
+      <span class="faint">Supporting context — same backend across both paths; the data path is the variable.</span>
+    </div>
+    <a
+      class="grafana-btn"
+      href="/grafana"
+      target="_blank"
+      rel="noopener noreferrer"
+      title="Open Grafana in a new tab"
+    >
+      Grafana <span aria-hidden="true">↗</span>
+    </a>
   </div>
 
   {#if envsWithData.length === 0}
@@ -166,13 +177,40 @@
   }
   .bh-head {
     display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .bh-title {
+    display: flex;
     align-items: baseline;
     gap: 12px;
     flex-wrap: wrap;
-    margin-bottom: 12px;
   }
   .bh-head .faint {
     font-size: 0.75rem;
+  }
+  /* External link to the Grafana dashboards (served at /grafana behind the same
+     CloudFront distribution); opens in a new tab. */
+  .grafana-btn {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    font-size: 0.78rem;
+    line-height: 1;
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-panel);
+    color: var(--text);
+    text-decoration: none;
+  }
+  .grafana-btn:hover {
+    border-color: color-mix(in srgb, var(--text) 40%, transparent);
+    background: color-mix(in srgb, var(--text) 8%, transparent);
   }
   .bh-grid {
     display: grid;
