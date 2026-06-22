@@ -6,57 +6,103 @@
   // (bidder-side Prometheus). It is intentionally secondary to the client-
   // measured latency comparison and never required for the core view
   // (Requirements 12.1, 12.2, 12.3).
+  //
+  // metric-watcher emits one Prometheus series per bidder pod, embedding the
+  // full label set in the metric key (with non-deterministic label ordering).
+  // We aggregate by base metric name (sum across pods) so the panel shows a
+  // small, stable set of totals that update in place — rather than a churning
+  // list of per-series rows that never settle.
 
   $: envsWithData = ENVS.filter((e) => $backendHealth[e])
 
-  // Friendly labels for known metric-watcher series; other keys are prettified.
+  // Friendly labels for the known bidder metric-watcher series.
   const LABELS: Record<string, string> = {
-    bid_request_received_number: 'Requests received',
-    bidder_request_number: 'Requests received',
-    bid_request_active_number: 'Active requests',
-    request_success_number: 'Successful',
+    bidder_bid_request_received_number: 'Requests received',
     bidder_request_success_number: 'Successful',
-    bad_request_number: 'Bad requests',
-    request_timeout_number: 'Timeouts',
-    bidder_request_timeout_number: 'Timeouts',
-    server_error_number: 'Server errors',
-    bidder_server_error_number: 'Server errors',
-    no_bid_number: 'No-bids',
     bidder_no_bid_number: 'No-bids',
+    bidder_bid_request_active_number: 'Active requests',
+    bidder_bad_request_number: 'Bad requests',
+    bidder_request_timeout_number: 'Timeouts',
+    bidder_server_error_number: 'Server errors',
   }
 
-  function prettify(key: string): string {
-    return LABELS[key] ?? key.replace(/_number$/, '').replace(/_/g, ' ')
+  // Fixed display order so rows keep stable positions across updates.
+  const ORDER = [
+    'bidder_bid_request_received_number',
+    'bidder_request_success_number',
+    'bidder_no_bid_number',
+    'bidder_bid_request_active_number',
+    'bidder_bad_request_number',
+    'bidder_request_timeout_number',
+    'bidder_server_error_number',
+  ]
+
+  /** Strips the `{label=value,...}` suffix from a Prometheus series key. */
+  function baseName(key: string): string {
+    const i = key.indexOf('{')
+    return i < 0 ? key : key.slice(0, i)
   }
 
-  function pick(metrics: Record<string, number>, keys: string[]): number | undefined {
-    for (const k of keys) if (typeof metrics[k] === 'number') return metrics[k]
-    return undefined
+  interface Aggregate {
+    sums: Record<string, number>
+    upTotal: number
+    upReady: number
   }
 
-  function isUp(msg: BackendHealthMessage): boolean | null {
-    const v = msg.metrics['up']
-    return typeof v === 'number' ? v >= 1 : null
+  /** Sums bidder_* series by base name and tallies the bidder's own up targets. */
+  function aggregate(msg: BackendHealthMessage): Aggregate {
+    const sums: Record<string, number> = {}
+    let upTotal = 0
+    let upReady = 0
+    for (const [key, val] of Object.entries(msg.metrics)) {
+      if (typeof val !== 'number') continue
+      const base = baseName(key)
+      if (base === 'up') {
+        // Only the bidder's own scrape targets reflect backend health; ignore
+        // the cluster-wide up series (kubelet, coredns, apiserver, node-exporter).
+        if (key.includes('bidder')) {
+          upTotal++
+          if (val >= 1) upReady++
+        }
+        continue
+      }
+      if (base.startsWith('bidder_')) {
+        sums[base] = (sums[base] ?? 0) + val
+      }
+    }
+    return { sums, upTotal, upReady }
   }
 
-  function noBidRate(metrics: Record<string, number>): string | null {
-    const noBid = pick(metrics, ['bidder_no_bid_number', 'no_bid_number'])
-    const received = pick(metrics, [
-      'bidder_request_number',
-      'bid_request_received_number',
-      'request_success_number',
-    ])
+  function upStatus(agg: Aggregate): boolean | null {
+    if (agg.upTotal === 0) return null
+    return agg.upReady === agg.upTotal
+  }
+
+  function noBidRate(agg: Aggregate): string | null {
+    const noBid = agg.sums['bidder_no_bid_number']
+    const received = agg.sums['bidder_bid_request_received_number']
     if (noBid === undefined || !received) return null
     return `${((noBid / received) * 100).toFixed(1)}%`
   }
 
-  function metricRows(msg: BackendHealthMessage): { label: string; value: string }[] {
-    return Object.entries(msg.metrics)
-      .filter(([k]) => k !== 'up')
-      .map(([k, v]) => ({
-        label: prettify(k),
-        value: Number.isInteger(v) ? formatInt(v) : v.toFixed(2),
-      }))
+  function prettify(base: string): string {
+    return base.replace(/^bidder_/, '').replace(/_number$/, '').replace(/_/g, ' ')
+  }
+
+  function rows(agg: Aggregate): { label: string; value: string }[] {
+    const seen = new Set<string>()
+    const out: { label: string; value: string }[] = []
+    for (const base of ORDER) {
+      if (agg.sums[base] === undefined) continue
+      seen.add(base)
+      out.push({ label: LABELS[base] ?? prettify(base), value: formatInt(agg.sums[base]) })
+    }
+    // Surface any other bidder_* metrics we didn't enumerate, for completeness.
+    for (const [base, v] of Object.entries(agg.sums)) {
+      if (seen.has(base)) continue
+      out.push({ label: LABELS[base] ?? prettify(base), value: formatInt(v) })
+    }
+    return out
   }
 
   function envOf(e: RtbEnv): BackendHealthMessage {
@@ -77,22 +123,22 @@
   {:else}
     <div class="bh-grid">
       {#each envsWithData as env (env)}
-        {@const msg = envOf(env)}
+        {@const agg = aggregate(envOf(env))}
         <div class="bh-card">
           <div class="bh-card-head">
             <span class="env-chip"><span class="env-swatch {env}"></span>{ENV_TOKENS[env].label}</span>
-            {#if isUp(msg) !== null}
-              <span class="up-badge {isUp(msg) ? 'up' : 'down'}">
-                target {isUp(msg) ? 'up' : 'down'}
+            {#if upStatus(agg) !== null}
+              <span class="up-badge {upStatus(agg) ? 'up' : 'down'}">
+                target {upStatus(agg) ? 'up' : 'down'}
               </span>
             {/if}
           </div>
-          {#if noBidRate(msg.metrics)}
+          {#if noBidRate(agg)}
             <div class="bh-row highlight">
-              <span class="bh-label">No-bid rate</span><span class="bh-value">{noBidRate(msg.metrics)}</span>
+              <span class="bh-label">No-bid rate</span><span class="bh-value">{noBidRate(agg)}</span>
             </div>
           {/if}
-          {#each metricRows(msg) as row (row.label)}
+          {#each rows(agg) as row (row.label)}
             <div class="bh-row">
               <span class="bh-label">{row.label}</span><span class="bh-value">{row.value}</span>
             </div>
