@@ -5,6 +5,7 @@
     isRunning,
     busy,
     actionError,
+    fixedParams,
     verify,
     runTest,
     stopTest,
@@ -12,7 +13,6 @@
   import {
     ENVS,
     ENV_TOKENS,
-    FIXED_PARAMS,
     DURATION,
     formatDuration,
     formatRate,
@@ -164,9 +164,9 @@
 
   <div class="row fixed-params">
     <span class="faint">Fixed (server-side):</span>
-    <span class="param"><span class="faint">rate</span> {formatRate(FIXED_PARAMS.rate)} req/s</span>
-    <span class="param"><span class="faint">devices</span> {FIXED_PARAMS.devices}</span>
-    <span class="param"><span class="faint">workers</span> {FIXED_PARAMS.workers}</span>
+    <span class="param"><span class="faint">rate</span> {formatRate($fixedParams.rate)} req/s</span>
+    <span class="param"><span class="faint">devices</span> {$fixedParams.devices}</span>
+    <span class="param"><span class="faint">workers</span> {$fixedParams.workers}</span>
   </div>
 
   {#if runEnvs.length}

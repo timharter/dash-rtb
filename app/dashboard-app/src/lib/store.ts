@@ -13,6 +13,7 @@ import {
   SSE_READINESS,
   SSE_RUN_STATE,
   SSE_BACKEND_HEALTH,
+  SSE_CONFIG,
   addBuckets,
   buildCdf,
   sampleCdf,
@@ -29,6 +30,7 @@ import {
   type BackendHealthMessage,
   type LatencyPercentiles,
   type CdfCurve,
+  type FixedParams,
 } from './contract'
 
 const MAX_POINTS = 1200 // ~20 min at 1s; matches the service buffer cap
@@ -45,6 +47,14 @@ export const readiness = writable<ReadinessEvent | null>(null)
 export const runState = writable<RunState | null>(null)
 export const backendHealth = writable<Partial<Record<RtbEnv, BackendHealthMessage>>>({})
 export const finals = writable<Partial<Record<RtbEnv, unknown>>>({})
+
+/**
+ * Server-side fixed load parameters (rate/devices/workers). Seeded with the
+ * compiled-in defaults and overwritten by the backend's `config` SSE event,
+ * which is replayed first on connect — so the UI always reflects the values the
+ * dashboard actually launches jobs with.
+ */
+export const fixedParams = writable<FixedParams>({ ...FIXED_PARAMS })
 
 /** Latest interval snapshot per environment, committed at flush cadence. */
 export const latest = writable<Partial<Record<RtbEnv, IntervalSnapshot>>>({})
@@ -219,6 +229,17 @@ export function connectStream(): void {
     const msg = safeParse<BackendHealthMessage>((e as MessageEvent).data)
     if (msg && msg['rtb-env']) {
       backendHealth.update((b) => ({ ...b, [msg['rtb-env']]: msg }))
+    }
+  })
+
+  es.addEventListener(SSE_CONFIG, (e) => {
+    const cfg = safeParse<Partial<FixedParams>>((e as MessageEvent).data)
+    if (cfg) {
+      fixedParams.update((prev) => ({
+        rate: typeof cfg.rate === 'number' ? cfg.rate : prev.rate,
+        devices: typeof cfg.devices === 'number' ? cfg.devices : prev.devices,
+        workers: typeof cfg.workers === 'number' ? cfg.workers : prev.workers,
+      }))
     }
   })
 }
@@ -442,6 +463,6 @@ export function hasAnyData(): boolean {
 export function currentRate(): number {
   const l = get(latest)
   const rates = ENVS.map((e) => l[e]?.rate).filter((r): r is number => typeof r === 'number')
-  if (rates.length === 0) return FIXED_PARAMS.rate
+  if (rates.length === 0) return get(fixedParams).rate
   return Math.max(...rates)
 }

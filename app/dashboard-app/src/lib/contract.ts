@@ -67,6 +67,7 @@ export const SSE_REPORT = 'report'
 export const SSE_READINESS = 'readiness'
 export const SSE_RUN_STATE = 'run-state'
 export const SSE_BACKEND_HEALTH = 'backend-health'
+export const SSE_CONFIG = 'config'
 
 // ---------------------------------------------------------------------------
 // Per-environment visual tokens. Each environment gets a distinct color AND a
@@ -107,10 +108,22 @@ export const ENV_TOKENS: Record<RtbEnv, EnvToken> = {
  * throughput is held constant and latency is the variable (Requirement 4.10,
  * 7.5). Rate mirrors the ~1,000 TPS RTB Fabric ceiling.
  */
-export const FIXED_PARAMS = {
+export interface FixedParams {
+  rate: number
+  devices: number
+  workers: number
+}
+
+/**
+ * Default fixed params, used only until the backend's `config` SSE event
+ * arrives on connect (it is replayed first). Keeping these in sync with the
+ * deployed defaults avoids a flash of stale values; the authoritative numbers
+ * always come from the backend so the display cannot silently drift.
+ */
+export const FIXED_PARAMS: FixedParams = {
   rate: 1000,
-  devices: 100,
-  workers: 50,
+  devices: 1000,
+  workers: 200,
 }
 
 // Duration bounds for the run control (seconds). Default 5 minutes

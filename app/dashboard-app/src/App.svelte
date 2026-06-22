@@ -6,8 +6,9 @@
     connection,
     isRunning,
     terminalOpen,
+    fixedParams,
   } from './lib/store'
-  import { ENVS, ENV_TOKENS, FIXED_PARAMS, formatRate } from './lib/contract'
+  import { ENVS, ENV_TOKENS, formatRate } from './lib/contract'
   import Controls from './lib/Controls.svelte'
   import KpiTiles from './lib/KpiTiles.svelte'
   import LatencyChart from './lib/LatencyChart.svelte'
@@ -34,7 +35,7 @@
     </div>
 
     <div class="rate-banner" title="Request rate is held constant; latency is the variable being compared.">
-      <span class="rate-value">{formatRate(FIXED_PARAMS.rate)}</span>
+      <span class="rate-value">{formatRate($fixedParams.rate)}</span>
       <span class="rate-unit">req/s · fixed</span>
     </div>
 
