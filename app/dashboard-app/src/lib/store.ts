@@ -348,6 +348,62 @@ export function getCdfData(): SeriesData {
   return { x, series }
 }
 
+/** Inverse-CDF: the latency (ms) under which `p` percent of requests fall,
+ * linearly interpolated between the curve's points. Returns null when `p`
+ * exceeds the highest cumulative percentage the curve reaches (a long tail kept
+ * only in the open-ended overflow bucket). */
+function latencyAtPercentile(curve: CdfCurve, p: number): number | null {
+  const { x, y } = curve
+  if (x.length === 0) return null
+  if (p <= y[0]) return x[0]
+  for (let i = 1; i < y.length; i++) {
+    if (y[i] >= p) {
+      const y0 = y[i - 1]
+      const y1 = y[i]
+      if (y1 <= y0) return x[i]
+      const t = (p - y0) / (y1 - y0)
+      return x[i - 1] + t * (x[i] - x[i - 1])
+    }
+  }
+  return null
+}
+
+/** Maximum "nines" plotted on the percentile axis: 3 => up to the 99.9th. */
+export const PCTL_MAX_NINES = 3
+const PCTL_SAMPLES = 64
+
+/** The percentile (0..100) for a transformed-axis value xt = -log10(1 - p/100). */
+export function percentileForAxis(xt: number): number {
+  return 100 * (1 - Math.pow(10, -xt))
+}
+
+export interface PercentileData {
+  /** Transformed-percentile axis (evenly spaced "nines" so the tail is legible). */
+  xt: number[]
+  series: Record<RtbEnv, (number | null)[]>
+}
+
+/**
+ * Builds latency-by-percentile curves for both environments on a tail-emphasizing
+ * axis. y is the latency under which p% of requests fall, so a curve that climbs
+ * toward the right exposes the tail — the NLB-vs-Fabric differentiator that a
+ * linear CDF squashes against 100% (Requirement 7.3).
+ */
+export function getPercentileData(): PercentileData {
+  const curves: Record<RtbEnv, CdfCurve> = {
+    nlb: buildCdf(cache.nlb.buckets),
+    rtbfabric: buildCdf(cache.rtbfabric.buckets),
+  }
+  const xt: number[] = []
+  for (let i = 0; i <= PCTL_SAMPLES; i++) xt.push((i / PCTL_SAMPLES) * PCTL_MAX_NINES)
+
+  const series = {} as Record<RtbEnv, (number | null)[]>
+  for (const env of ENVS) {
+    series[env] = xt.map((t) => latencyAtPercentile(curves[env], percentileForAxis(t)))
+  }
+  return { xt, series }
+}
+
 export interface TailStats {
   hasData: boolean
   errors: number // non-2xx/3xx responses
