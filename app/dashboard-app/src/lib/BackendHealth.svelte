@@ -225,7 +225,7 @@
     background: color-mix(in srgb, var(--text) 4%, transparent);
   }
   .bh-rows .bh-row:hover {
-    background: var(--bg-panel-2);
+    background: color-mix(in srgb, var(--text) 13%, transparent);
   }
   .bh-label {
     color: var(--text-dim);

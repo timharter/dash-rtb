@@ -86,7 +86,7 @@
     background: color-mix(in srgb, var(--text) 4%, transparent);
   }
   .tbody .trow:hover {
-    background: var(--bg-panel-2);
+    background: color-mix(in srgb, var(--text) 13%, transparent);
   }
   .thead {
     border-bottom: 1px solid var(--border);
