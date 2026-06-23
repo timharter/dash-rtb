@@ -68,6 +68,13 @@
     return ready(env) ? 'Ready to run' : 'Not ready'
   }
 
+  // The detected bid-request endpoint for an environment, surfaced after verify
+  // so the user can confirm the right RTB Fabric link / NLB was discovered
+  // before launching a load test.
+  function endpointFor(env: RtbEnv): string {
+    return $readiness?.endpoints?.[env] ?? ''
+  }
+
   const modeLabels: Record<string, string> = {
     nlb: 'NLB only',
     rtbfabric: 'RTB Fabric only',
@@ -106,11 +113,19 @@
   <div class="readiness">
     {#each ENVS as env (env)}
       <div class="env-status" class:ready={ready(env)}>
-        <span class="env-chip"><span class="env-swatch {env}"></span>{ENV_TOKENS[env].label}</span>
-        <span class="status-pill {ready(env) ? 'ok' : 'pending'}">
-          {ready(env) ? 'Ready' : verified ? 'Not ready' : 'Unverified'}
-        </span>
-        <span class="reason faint">{reasonFor(env)}</span>
+        <div class="env-line">
+          <span class="env-chip"><span class="env-swatch {env}"></span>{ENV_TOKENS[env].label}</span>
+          <span class="status-pill {ready(env) ? 'ok' : 'pending'}">
+            {ready(env) ? 'Ready' : verified ? 'Not ready' : 'Unverified'}
+          </span>
+          <span class="reason faint">{reasonFor(env)}</span>
+        </div>
+        {#if endpointFor(env)}
+          <div class="endpoint" title={endpointFor(env)}>
+            <span class="faint">detected endpoint</span>
+            <code>{endpointFor(env)}</code>
+          </div>
+        {/if}
       </div>
     {/each}
   </div>
@@ -212,8 +227,33 @@
   }
   .env-status {
     display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .env-line {
+    display: flex;
     align-items: center;
     gap: 10px;
+  }
+  .endpoint {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 0.78rem;
+    max-width: 100%;
+  }
+  .endpoint code {
+    font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    color: var(--text);
+    background: var(--bg-panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px 7px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 32ch;
   }
   .status-pill {
     font-size: 0.72rem;

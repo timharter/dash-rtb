@@ -13,6 +13,8 @@ export interface ReadinessEvent {
   nlb: ReadinessStatus
   rtbfabric: ReadinessStatus
   reasons?: Record<string, string>
+  /** Resolved bid-request URL detected per environment, keyed by run mode. */
+  endpoints?: Record<string, string>
 }
 
 export type RunStatus = 'idle' | 'running' | 'complete' | 'failed' | 'stopped'
