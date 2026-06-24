@@ -1,19 +1,12 @@
 <script lang="ts">
-  import { tick, getTailStats, hasAnyData, type TailStats } from './store'
-  import { ENVS, ENV_TOKENS, HIGH_LATENCY_MS, formatInt, formatMs } from './contract'
+  import { tailStats, finals, runState } from './store'
+  import { ENVS, ENV_TOKENS, HIGH_LATENCY_MS, formatInt, formatMs, type RtbEnv } from './contract'
 
-  interface TailView {
-    nlb: TailStats
-    rtbfabric: TailStats
-    any: boolean
-  }
-
-  // Recompute on each batched tick by passing $tick as an argument (a real use,
-  // so it registers as a reactive dependency).
-  function computeTail(_tick: number): TailView {
-    return { nlb: getTailStats('nlb'), rtbfabric: getTailStats('rtbfabric'), any: hasAnyData() }
-  }
-  $: view = computeTail($tick)
+  // Per-environment tail stats: the authoritative completion report once an
+  // environment finishes, otherwise the live accumulation (see store.tailStats).
+  $: view = $tailStats
+  $: any = view.nlb.hasData || view.rtbfabric.hasData
+  $: hasReports = Boolean($finals.nlb || $finals.rtbfabric)
 
   const rows = [
     { key: 'errors' as const, label: 'Errors (non-2xx)' },
@@ -22,16 +15,52 @@
     { key: 'max' as const, label: 'Max latency' },
   ]
 
-  function cell(env: 'nlb' | 'rtbfabric', key: (typeof rows)[number]['key']): string {
+  function cell(env: RtbEnv, key: (typeof rows)[number]['key']): string {
     const s = view[env]
     if (!s.hasData) return '—'
     return key === 'max' ? formatMs(s.max) : formatInt(s[key])
   }
+
+  // Offline analysis: a raw completion report exists per environment once that
+  // environment finishes. Download serializes the exact payload the
+  // load-generator emitted (latencies, buckets, status codes, bytes, errors).
+  function downloadReport(env: RtbEnv): void {
+    const report = $finals[env]
+    if (!report) return
+    const runId = $runState?.run_id ?? 'run'
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `rtb-report-${env}-${runId}.json`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
 </script>
 
 <section class="panel tail">
-  <h2>Tail &amp; reliability</h2>
-  {#if !view.any}
+  <div class="row head">
+    <h2>Tail &amp; reliability</h2>
+    {#if hasReports}
+      <div class="report-downloads">
+        <span class="faint">Raw report:</span>
+        {#each ENVS as env (env)}
+          {#if $finals[env]}
+            <button
+              class="dl"
+              onclick={() => downloadReport(env)}
+              title={`Download the raw ${ENV_TOKENS[env].label} completion report (JSON) for offline analysis`}
+            >
+              <span class="env-swatch {env}"></span>{ENV_TOKENS[env].label} ↓
+            </button>
+          {/if}
+        {/each}
+      </div>
+    {/if}
+  </div>
+  {#if !any}
     <div class="idle-state">Tail and error metrics appear once a run is producing samples.</div>
   {:else}
     <div class="tail-table">
@@ -70,6 +99,37 @@
 </section>
 
 <style>
+  .head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .report-downloads {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 0.8rem;
+  }
+  .dl {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    font-size: 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-panel-2);
+    color: var(--text);
+    cursor: pointer;
+  }
+  .dl:hover {
+    border-color: color-mix(in srgb, var(--text) 35%, transparent);
+    background: color-mix(in srgb, var(--text) 8%, transparent);
+  }
   .tail-table {
     display: flex;
     flex-direction: column;

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { latest } from './store'
+  import { kpiLatest } from './store'
   import {
     ENV_TOKENS,
     formatMs,
@@ -7,7 +7,7 @@
     formatErrorPct,
     lowerIsBetterDelta,
     type Delta,
-    type IntervalSnapshot,
+    type KpiSnapshot,
   } from './contract'
 
   interface Tile {
@@ -17,15 +17,17 @@
     delta: Delta
   }
 
-  function errorFraction(s: IntervalSnapshot | undefined): number | undefined {
+  function errorFraction(s: KpiSnapshot | undefined): number | undefined {
     return s ? 1 - s.success : undefined
   }
 
   // KPI tiles show the current value per environment with the RTB-Fabric-vs-NLB
-  // delta (Requirement 7.1). Latency and error use "lower is better"; throughput
-  // is held fixed so its delta stays neutral.
-  $: nlb = $latest.nlb
-  $: rtb = $latest.rtbfabric
+  // delta (Requirement 7.1). While running this is the latest live window; once
+  // an environment completes it is the authoritative completion report, so the
+  // tiles no longer latch onto the noisy final partial window. Latency and error
+  // use "lower is better"; throughput is held fixed so its delta stays neutral.
+  $: nlb = $kpiLatest.nlb
+  $: rtb = $kpiLatest.rtbfabric
   $: tiles = [
     {
       label: 'p99 latency',

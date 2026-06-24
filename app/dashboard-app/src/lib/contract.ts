@@ -52,6 +52,53 @@ export interface IntervalSnapshot {
   buckets: Record<string, number>
 }
 
+/**
+ * Authoritative end-of-run report emitted once per environment when a run
+ * completes (SSE "report"). Mirrors the load-generator EnhancedReport/Metrics
+ * (guidance-rtb/tools/load-generator/code/load_generator/metrics.go).
+ *
+ * Unit note: every `latencies` field is a Go time.Duration in NANOSECONDS, and
+ * `buckets` keys are the bucket lower-edge in NANOSECONDS (Histogram.MarshalJSON
+ * prints the Duration's int64). Use nsToMs() when displaying. This differs from
+ * the live IntervalSnapshot, whose latencies are already milliseconds and whose
+ * bucket keys are "loMs-hiMs" strings.
+ */
+export interface CompletionReport {
+  type: 'report'
+  source: 'load-generator'
+  'rtb-env': RtbEnv
+  latencies: {
+    total: number
+    mean: number
+    '50th': number
+    '90th': number
+    '95th': number
+    '99th': number
+    max: number
+    min: number
+  }
+  rate: number
+  throughput: number
+  success: number
+  requests: number
+  status_codes: Record<string, number>
+  buckets?: Record<string, number>
+}
+
+/** Minimal per-environment shape the KPI tiles render (satisfied by both a
+ *  live IntervalSnapshot and a report-derived snapshot). */
+export interface KpiSnapshot {
+  latencies_ms: LatencyPercentiles
+  rate: number
+  success: number
+}
+
+/** Converts a Go time.Duration (nanoseconds) to milliseconds. */
+export function nsToMs(ns: number | null | undefined): number {
+  if (ns === null || ns === undefined || Number.isNaN(ns)) return 0
+  return ns / 1e6
+}
+
 /** metric-watcher message routed to the backend-health SSE event. */
 export interface BackendHealthMessage {
   timestamp?: string

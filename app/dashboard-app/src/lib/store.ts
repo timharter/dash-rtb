@@ -22,9 +22,12 @@ import {
   FIXED_PARAMS,
   HIGH_LATENCY_MS,
   parseBucketBounds,
+  nsToMs,
   type RtbEnv,
   type RunMode,
   type IntervalSnapshot,
+  type CompletionReport,
+  type KpiSnapshot,
   type ReadinessEvent,
   type RunState,
   type BackendHealthMessage,
@@ -46,7 +49,7 @@ export const connection = writable<ConnectionState>('connecting')
 export const readiness = writable<ReadinessEvent | null>(null)
 export const runState = writable<RunState | null>(null)
 export const backendHealth = writable<Partial<Record<RtbEnv, BackendHealthMessage>>>({})
-export const finals = writable<Partial<Record<RtbEnv, unknown>>>({})
+export const finals = writable<Partial<Record<RtbEnv, CompletionReport>>>({})
 
 /**
  * Server-side fixed load parameters (rate/devices/workers). Seeded with the
@@ -219,7 +222,7 @@ export function connectStream(): void {
   })
 
   es.addEventListener(SSE_REPORT, (e) => {
-    const report = safeParse<{ 'rtb-env'?: RtbEnv }>((e as MessageEvent).data)
+    const report = safeParse<CompletionReport>((e as MessageEvent).data)
     if (report && report['rtb-env']) {
       finals.update((f) => ({ ...f, [report['rtb-env'] as RtbEnv]: report }))
     }
@@ -458,6 +461,87 @@ export function getTailStats(env: RtbEnv): TailStats {
 export function hasAnyData(): boolean {
   return cache.nlb.sorted.length > 0 || cache.rtbfabric.sorted.length > 0
 }
+
+// ---------------------------------------------------------------------------
+// Authoritative end-of-run selection. While an environment is still running we
+// show the latest live window; once it completes we switch to its completion
+// report, which is the whole-run aggregate. This fixes the end-of-test skew
+// where the final partial live window (a short, dead-time-padded window) became
+// the KPI source and collapsed throughput. The report is also a single discrete
+// per-env payload, so it is unaffected by any live-buffer accumulation quirks.
+// ---------------------------------------------------------------------------
+
+function isComplete($rs: RunState | null, env: RtbEnv): boolean {
+  return $rs?.environments?.[env]?.status === 'complete'
+}
+
+/** KPI values from a completion report (latencies are ns in the report). */
+function kpiFromReport(r: CompletionReport): KpiSnapshot {
+  return {
+    latencies_ms: {
+      p50: nsToMs(r.latencies['50th']),
+      p90: nsToMs(r.latencies['90th']),
+      p95: nsToMs(r.latencies['95th']),
+      p99: nsToMs(r.latencies['99th']),
+      max: nsToMs(r.latencies.max),
+      mean: nsToMs(r.latencies.mean),
+    },
+    rate: r.rate,
+    success: r.success,
+  }
+}
+
+/** Tail/reliability stats from a completion report. Report bucket keys are the
+ *  bucket lower-edge in nanoseconds (see CompletionReport). */
+function tailFromReport(r: CompletionReport): TailStats {
+  let errors = 0
+  let timeouts = 0
+  for (const [code, n] of Object.entries(r.status_codes ?? {})) {
+    const num = Number(code)
+    if (num === 504) timeouts += n
+    if (num >= 400 || num === 0) errors += n
+  }
+  let overThreshold = 0
+  for (const [ns, n] of Object.entries(r.buckets ?? {})) {
+    if (nsToMs(Number(ns)) >= HIGH_LATENCY_MS) overThreshold += n
+  }
+  return { hasData: true, errors, timeouts, overThreshold, max: nsToMs(r.latencies.max) }
+}
+
+/**
+ * Per-environment KPI snapshot for the tiles: the completion report when the
+ * environment has finished, otherwise the latest live window. Recomputes on run
+ * state, report arrival, and each live flush.
+ */
+export const kpiLatest: Readable<Partial<Record<RtbEnv, KpiSnapshot>>> = derived(
+  [runState, finals, latest],
+  ([$rs, $finals, $latest]) => {
+    const out: Partial<Record<RtbEnv, KpiSnapshot>> = {}
+    for (const env of ENVS) {
+      const report = $finals[env]
+      if (isComplete($rs, env) && report) out[env] = kpiFromReport(report)
+      else if ($latest[env]) out[env] = $latest[env]
+    }
+    return out
+  },
+)
+
+/**
+ * Per-environment tail/reliability stats: the completion report when finished,
+ * otherwise the accumulated live cache. `tick` is a dependency so the live path
+ * recomputes on each flush.
+ */
+export const tailStats: Readable<Record<RtbEnv, TailStats>> = derived(
+  [runState, finals, tick],
+  ([$rs, $finals]) => {
+    const out = {} as Record<RtbEnv, TailStats>
+    for (const env of ENVS) {
+      const report = $finals[env]
+      out[env] = isComplete($rs, env) && report ? tailFromReport(report) : getTailStats(env)
+    }
+    return out
+  },
+)
 
 /** The achieved request rate from the latest snapshots, falling back to the fixed target. */
 export function currentRate(): number {
