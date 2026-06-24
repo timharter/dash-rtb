@@ -156,17 +156,26 @@
           <div class="endpoint">
             <span class="faint">detected endpoint</span>
             <span class="endpoint-box">
+              <button
+                class="copy-glyph"
+                class:copied={copiedEnv === env}
+                onclick={() => copyEndpoint(env)}
+                aria-label={`Copy ${ENV_TOKENS[env].label} endpoint URL`}
+              >
+                {#if copiedEnv === env}
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                {:else}
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                {/if}
+              </button>
               <code class="endpoint-url">{endpointFor(env)}</code>
               <span class="endpoint-tip" role="tooltip">{endpointFor(env)}</span>
             </span>
-            <button
-              class="copy-btn"
-              class:copied={copiedEnv === env}
-              onclick={() => copyEndpoint(env)}
-              aria-label={`Copy ${ENV_TOKENS[env].label} endpoint URL`}
-            >
-              {copiedEnv === env ? '✓ Copied' : 'Copy'}
-            </button>
           </div>
         {/if}
       </div>
@@ -289,20 +298,48 @@
   .endpoint-box {
     position: relative;
     display: inline-flex;
+    align-items: center;
+    gap: 6px;
     min-width: 0;
+    max-width: 38ch;
+    padding: 2px 8px;
+    background: var(--bg-panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  /* Copy affordance: a clipboard glyph at the start of the chip that swaps to a
+     check on success. currentColor keeps it monochrome and theme-aware. */
+  .copy-glyph {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px;
+    height: 15px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+  .copy-glyph:hover {
+    color: var(--text);
+  }
+  .copy-glyph.copied {
+    color: var(--good);
+  }
+  .copy-glyph svg {
+    width: 13px;
+    height: 13px;
+    display: block;
   }
   .endpoint-url {
     font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
     color: var(--text);
-    background: var(--bg-panel-2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 2px 7px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: 34ch;
-    cursor: default;
+    min-width: 0;
   }
   /* Immediate (no-delay) tooltip with the full URL on hover, replacing the slow
      native title. word-break keeps a long URL inside the panel. */
@@ -328,25 +365,6 @@
   }
   .endpoint-box:hover .endpoint-tip {
     display: block;
-  }
-  .copy-btn {
-    flex: none;
-    font-size: 0.72rem;
-    line-height: 1.5;
-    padding: 2px 8px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--bg-panel-2);
-    color: var(--text);
-    cursor: pointer;
-  }
-  .copy-btn:hover {
-    border-color: color-mix(in srgb, var(--text) 35%, transparent);
-    background: color-mix(in srgb, var(--text) 8%, transparent);
-  }
-  .copy-btn.copied {
-    color: var(--good);
-    border-color: color-mix(in srgb, var(--good) 50%, transparent);
   }
   .status-pill {
     font-size: 0.72rem;
