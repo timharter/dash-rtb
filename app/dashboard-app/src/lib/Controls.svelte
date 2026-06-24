@@ -78,6 +78,35 @@
   // before launching a load test.
   $: endpointFor = (env: RtbEnv): string => $readiness?.endpoints?.[env] ?? ''
 
+  // Copy the detected endpoint to the clipboard with brief inline feedback. The
+  // dashboard is served over HTTPS so the async Clipboard API is available; the
+  // textarea path is a defensive fallback for non-secure contexts.
+  let copiedEnv: RtbEnv | null = null
+  let copyTimer: ReturnType<typeof setTimeout> | undefined
+  async function copyEndpoint(env: RtbEnv): Promise<void> {
+    const url = endpointFor(env)
+    if (!url) return
+    try {
+      await navigator.clipboard.writeText(url)
+    } catch {
+      const ta = document.createElement('textarea')
+      ta.value = url
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      try {
+        document.execCommand('copy')
+      } catch {
+        /* clipboard unavailable; ignore */
+      }
+      ta.remove()
+    }
+    copiedEnv = env
+    clearTimeout(copyTimer)
+    copyTimer = setTimeout(() => (copiedEnv = null), 1500)
+  }
+
   const modeLabels: Record<string, string> = {
     nlb: 'NLB only',
     rtbfabric: 'RTB Fabric only',
@@ -124,9 +153,20 @@
           <span class="reason faint">{reasonFor(env)}</span>
         </div>
         {#if endpointFor(env)}
-          <div class="endpoint" title={endpointFor(env)}>
+          <div class="endpoint">
             <span class="faint">detected endpoint</span>
-            <code>{endpointFor(env)}</code>
+            <span class="endpoint-box">
+              <code class="endpoint-url">{endpointFor(env)}</code>
+              <span class="endpoint-tip" role="tooltip">{endpointFor(env)}</span>
+            </span>
+            <button
+              class="copy-btn"
+              class:copied={copiedEnv === env}
+              onclick={() => copyEndpoint(env)}
+              aria-label={`Copy ${ENV_TOKENS[env].label} endpoint URL`}
+            >
+              {copiedEnv === env ? '✓ Copied' : 'Copy'}
+            </button>
           </div>
         {/if}
       </div>
@@ -241,12 +281,17 @@
   }
   .endpoint {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 8px;
     font-size: 0.78rem;
     max-width: 100%;
   }
-  .endpoint code {
+  .endpoint-box {
+    position: relative;
+    display: inline-flex;
+    min-width: 0;
+  }
+  .endpoint-url {
     font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
     color: var(--text);
     background: var(--bg-panel-2);
@@ -256,7 +301,52 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: 32ch;
+    max-width: 34ch;
+    cursor: default;
+  }
+  /* Immediate (no-delay) tooltip with the full URL on hover, replacing the slow
+     native title. word-break keeps a long URL inside the panel. */
+  .endpoint-tip {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 30;
+    display: none;
+    width: max-content;
+    max-width: min(560px, 80vw);
+    padding: 6px 9px;
+    font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: 0.75rem;
+    line-height: 1.45;
+    color: var(--text);
+    background: var(--bg-panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+    white-space: normal;
+    word-break: break-all;
+  }
+  .endpoint-box:hover .endpoint-tip {
+    display: block;
+  }
+  .copy-btn {
+    flex: none;
+    font-size: 0.72rem;
+    line-height: 1.5;
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-panel-2);
+    color: var(--text);
+    cursor: pointer;
+  }
+  .copy-btn:hover {
+    border-color: color-mix(in srgb, var(--text) 35%, transparent);
+    background: color-mix(in srgb, var(--text) 8%, transparent);
+  }
+  .copy-btn.copied {
+    color: var(--good);
+    border-color: color-mix(in srgb, var(--good) 50%, transparent);
   }
   .status-pill {
     font-size: 0.72rem;
