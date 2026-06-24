@@ -9,11 +9,17 @@
   import 'uplot/dist/uPlot.min.css'
   import { tick, getPercentileData, percentileForAxis, hasAnyData, PCTL_MAX_NINES } from './store'
   import { ENV_TOKENS, formatMs } from './contract'
+  import ChartModal from './ChartModal.svelte'
 
   let chartEl: HTMLDivElement
   let chart: uPlot | null = null
   let ro: ResizeObserver | null = null
   let empty = true
+
+  // Expanded ("blown up") view: a second uPlot instance lives inside the modal
+  // and is fed from the same store getters as the inline one (see draw()).
+  let expanded = false
+  let modalChart: uPlot | null = null
 
   const axisStroke = '#6b7c99'
   const gridStroke = 'rgba(38, 51, 80, 0.6)'
@@ -35,10 +41,10 @@
     return `p${p.toFixed(digits)}`
   }
 
-  function options(width: number): uPlot.Options {
+  function options(width: number, height = 280): uPlot.Options {
     return {
       width,
-      height: 280,
+      height,
       legend: { show: true },
       cursor: { focus: { prox: 16 }, points: { size: 6 } },
       scales: {
@@ -83,10 +89,30 @@
   }
 
   function draw(): void {
-    if (!chart) return
     const { xt, series } = getPercentileData()
     empty = !hasAnyData()
-    chart.setData([xt, series.nlb, series.rtbfabric])
+    const data: uPlot.AlignedData = [xt, series.nlb, series.rtbfabric]
+    chart?.setData(data)
+    modalChart?.setData(data)
+  }
+
+  // Svelte action: create the expanded chart when the modal element mounts and
+  // tear it down when it unmounts (i.e. when `expanded` flips false). Height
+  // tracks the viewport so the blown-up chart fills the overlay; width/height
+  // follow window resizes.
+  function modalChartView(node: HTMLDivElement) {
+    const heightFor = () => Math.max(200, Math.round(window.innerHeight * 0.72))
+    modalChart = new uPlot(options(node.clientWidth, heightFor()), [[], [], []], node)
+    draw()
+    const onResize = () => modalChart?.setSize({ width: node.clientWidth, height: heightFor() })
+    window.addEventListener('resize', onResize)
+    return {
+      destroy() {
+        window.removeEventListener('resize', onResize)
+        modalChart?.destroy()
+        modalChart = null
+      },
+    }
   }
 
   onMount(() => {
@@ -113,7 +139,14 @@
 <section class="panel chart-panel">
   <div class="chart-head">
     <h2>Latency by percentile</h2>
-    <span class="faint">lower is better · the tail (p99+) is the differentiator</span>
+    <div class="head-right">
+      <span class="faint">lower is better · the tail (p99+) is the differentiator</span>
+      <button class="expand" onclick={() => (expanded = true)} aria-label="Expand chart" title="Expand chart">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M16 21h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+        </svg>
+      </button>
+    </div>
   </div>
   <div class="chart-wrap">
     <div class="chart" bind:this={chartEl}></div>
@@ -123,13 +156,20 @@
   </div>
 </section>
 
+{#if expanded}
+  <ChartModal title="Latency by percentile" onClose={() => (expanded = false)}>
+    <span class="faint" slot="controls">lower is better · the tail (p99+) is the differentiator</span>
+    <div class="modal-chart" use:modalChartView></div>
+  </ChartModal>
+{/if}
+
 <style>
   .chart-panel {
     min-width: 0;
   }
   .chart-head {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     justify-content: space-between;
     gap: 12px;
     margin-bottom: 8px;
@@ -139,6 +179,27 @@
   }
   .chart-head .faint {
     font-size: 0.75rem;
+  }
+  .head-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .expand {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    color: var(--text-dim);
+    flex: 0 0 auto;
+  }
+  .expand:hover {
+    color: var(--text);
+  }
+  .modal-chart {
+    width: 100%;
   }
   .chart-wrap {
     position: relative;
