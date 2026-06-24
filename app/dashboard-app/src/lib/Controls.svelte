@@ -6,6 +6,7 @@
     busy,
     actionError,
     fixedParams,
+    autoTrials,
     verify,
     runTest,
     stopTest,
@@ -48,10 +49,14 @@
     mode = avail.both ? 'both' : avail.nlb ? 'nlb' : 'rtbfabric'
   }
 
-  $: runDisabled = $busy !== null || $isRunning || !anyReady || !avail[mode]
-  $: stopDisabled = $busy !== null || !$isRunning
+  // Auto-trials (the Repeated trials panel) drive their own runs; lock the
+  // manual controls while a sequence is active to avoid conflicting launches.
+  $: autoActive = $autoTrials?.active ?? false
+  $: runDisabled = $busy !== null || $isRunning || !anyReady || !avail[mode] || autoActive
+  $: stopDisabled = $busy !== null || !$isRunning || autoActive
 
   function runHint(): string {
+    if (autoActive) return 'Auto-trials are running — use the Repeated trials panel to stop.'
     if (!verified) return 'Click “Verify configuration” first to check readiness.'
     if ($isRunning) return 'A run is already in progress. Stop it before launching another.'
     if (!anyReady) return 'No environment is ready yet — see the status above.'
@@ -190,7 +195,7 @@
           <button
             class="seg"
             class:active={mode === m.value}
-            disabled={!verified || !avail[m.value] || $isRunning}
+            disabled={!verified || !avail[m.value] || $isRunning || autoActive}
             title={!avail[m.value] && verified ? 'Required environment(s) not ready' : ''}
             onclick={() => (mode = m.value)}
           >

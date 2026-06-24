@@ -51,6 +51,35 @@ export const runState = writable<RunState | null>(null)
 export const backendHealth = writable<Partial<Record<RtbEnv, BackendHealthMessage>>>({})
 export const finals = writable<Partial<Record<RtbEnv, CompletionReport>>>({})
 
+// Auto-trials: per-environment summaries accumulated across a sequence of runs,
+// plus the orchestration state. Used to show mean ± std dev so run-to-run
+// variance is visible (the representative comparison). Orchestration lives in
+// the control API section below.
+export interface TrialSummary {
+  p50: number
+  p90: number
+  p95: number
+  p99: number
+  mean: number
+  success: number
+  throughput: number
+}
+
+export interface TrialState {
+  active: boolean
+  total: number
+  completed: number
+  durationSec: number
+  phase: 'running' | 'done' | 'stopped' | 'error'
+}
+
+/** Default auto-trial config: 5 simultaneous runs of 2 minutes each. */
+export const TRIAL_COUNT = 5
+export const TRIAL_DURATION_SEC = 120
+
+export const trials = writable<Record<RtbEnv, TrialSummary[]>>({ nlb: [], rtbfabric: [] })
+export const autoTrials = writable<TrialState | null>(null)
+
 /**
  * Server-side fixed load parameters (rate/devices/workers). Seeded with the
  * compiled-in defaults and overwritten by the backend's `config` SSE event,
@@ -235,6 +264,7 @@ export function connectStream(): void {
       clearEnvs(envsForMode(state.mode))
     }
     runState.set(state)
+    maybeAdvanceTrials()
   })
 
   es.addEventListener(SSE_READINESS, (e) => {
@@ -246,6 +276,7 @@ export function connectStream(): void {
     const report = safeParse<CompletionReport>((e as MessageEvent).data)
     if (report && report['rtb-env']) {
       finals.update((f) => ({ ...f, [report['rtb-env'] as RtbEnv]: report }))
+      maybeAdvanceTrials()
     }
   })
 
@@ -350,6 +381,114 @@ async function errorText(res: Response, fallback: string): Promise<string> {
 
 function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
+}
+
+// ---------------------------------------------------------------------------
+// Auto-trials: run N simultaneous trials back-to-back and accumulate per-env
+// summary stats, so the UI can show mean ± std dev across runs. Orchestrated
+// client-side by reusing /dash/run; a trial is recorded when both environments
+// of the current run complete and their reports are in.
+// ---------------------------------------------------------------------------
+
+let autoCurrentRunId: string | null = null
+let autoRecordedRunId: string | null = null
+
+function summarize(r: CompletionReport): TrialSummary {
+  return {
+    p50: nsToMs(r.latencies['50th']),
+    p90: nsToMs(r.latencies['90th']),
+    p95: nsToMs(r.latencies['95th']),
+    p99: nsToMs(r.latencies['99th']),
+    mean: nsToMs(r.latencies.mean),
+    success: r.success,
+    throughput: r.throughput,
+  }
+}
+
+async function launchTrial(durationSec: number): Promise<void> {
+  actionError.set(null)
+  try {
+    const res = await post('run', { mode: 'both', duration: durationToGo(durationSec) })
+    if (!res.ok) throw new Error(await errorText(res, 'Failed to start trial'))
+    const state = (await res.json()) as RunState
+    autoCurrentRunId = state.run_id
+    if (state.run_id && state.run_id !== lastRunID) {
+      lastRunID = state.run_id
+      clearEnvs(envsForMode(state.mode))
+    }
+    runState.set(state)
+  } catch (err) {
+    actionError.set(messageOf(err))
+    autoTrials.update((a) => (a ? { ...a, active: false, phase: 'error' } : a))
+  }
+}
+
+export async function startAutoTrials(
+  count = TRIAL_COUNT,
+  durationSec = TRIAL_DURATION_SEC,
+): Promise<void> {
+  trials.set({ nlb: [], rtbfabric: [] })
+  autoCurrentRunId = null
+  autoRecordedRunId = null
+  autoTrials.set({ active: true, total: count, completed: 0, durationSec, phase: 'running' })
+  await launchTrial(durationSec)
+}
+
+export async function stopAutoTrials(): Promise<void> {
+  autoTrials.update((a) => (a ? { ...a, active: false, phase: 'stopped' } : a))
+  await stopTest('both')
+}
+
+export function clearTrials(): void {
+  trials.set({ nlb: [], rtbfabric: [] })
+  autoTrials.set(null)
+  autoCurrentRunId = null
+  autoRecordedRunId = null
+}
+
+/**
+ * Records the current auto-trial and launches the next when both environments
+ * of the current run are complete and both reports have arrived. Idempotent per
+ * run via autoRecordedRunId. Called from the run-state and report SSE handlers.
+ */
+function maybeAdvanceTrials(): void {
+  const a = get(autoTrials)
+  if (!a || !a.active || !autoCurrentRunId) return
+  const state = get(runState)
+  if (!state || state.run_id !== autoCurrentRunId || state.run_id === autoRecordedRunId) return
+  if (!ENVS.every((e) => state.environments[e]?.status === 'complete')) return
+  const f = get(finals)
+  if (!ENVS.every((e) => f[e])) return // wait until both reports are in
+
+  autoRecordedRunId = state.run_id
+  trials.update((t) => ({
+    nlb: [...t.nlb, summarize(f.nlb as CompletionReport)],
+    rtbfabric: [...t.rtbfabric, summarize(f.rtbfabric as CompletionReport)],
+  }))
+
+  const completed = a.completed + 1
+  if (completed < a.total) {
+    autoTrials.set({ ...a, completed })
+    // brief beat so the completed trial registers before the next run clears it
+    setTimeout(() => {
+      if (get(autoTrials)?.active) void launchTrial(a.durationSec)
+    }, 1000)
+  } else {
+    autoTrials.set({ ...a, completed, active: false, phase: 'done' })
+  }
+}
+
+/** Arithmetic mean of a sample. */
+export function meanOf(xs: number[]): number {
+  return xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : 0
+}
+
+/** Sample standard deviation (n-1); 0 for fewer than two samples. */
+export function stdDevOf(xs: number[]): number {
+  if (xs.length < 2) return 0
+  const m = meanOf(xs)
+  const v = xs.reduce((s, x) => s + (x - m) * (x - m), 0) / (xs.length - 1)
+  return Math.sqrt(v)
 }
 
 // ---------------------------------------------------------------------------

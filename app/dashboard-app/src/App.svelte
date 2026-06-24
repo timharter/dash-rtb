@@ -10,6 +10,7 @@
   } from './lib/store'
   import { ENVS, ENV_TOKENS, formatRate } from './lib/contract'
   import Controls from './lib/Controls.svelte'
+  import TrialsPanel from './lib/TrialsPanel.svelte'
   import KpiTiles from './lib/KpiTiles.svelte'
   import LatencyChart from './lib/LatencyChart.svelte'
   import CdfChart from './lib/CdfChart.svelte'
@@ -65,6 +66,8 @@
   </header>
 
   <Controls />
+
+  <TrialsPanel />
 
   <KpiTiles />
 
