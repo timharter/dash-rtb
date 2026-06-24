@@ -4,6 +4,7 @@
   import 'uplot/dist/uPlot.min.css'
   import { tick, getLatencySeries, hasAnyData } from './store'
   import { ENV_TOKENS, type LatencyPercentiles } from './contract'
+  import { isXZoomed, resetXZoom } from './chartZoom'
   import ChartModal from './ChartModal.svelte'
 
   type Metric = Extract<keyof LatencyPercentiles, 'p50' | 'p95' | 'p99'>
@@ -24,10 +25,14 @@
   let expanded = false
   let modalChart: uPlot | null = null
 
+  // Whether each chart is currently drag-zoomed, so we can offer a reset.
+  let inlineZoomed = false
+  let modalZoomed = false
+
   const axisStroke = '#6b7c99'
   const gridStroke = 'rgba(38, 51, 80, 0.6)'
 
-  function options(width: number, height = 280): uPlot.Options {
+  function options(width: number, height = 280, setZoom: (z: boolean) => void = () => {}): uPlot.Options {
     return {
       width,
       height,
@@ -69,6 +74,13 @@
           spanGaps: false,
         },
       ],
+      hooks: {
+        setScale: [
+          (u, key) => {
+            if (key === 'x') setZoom(isXZoomed(u))
+          },
+        ],
+      },
     }
   }
 
@@ -86,7 +98,7 @@
   // follow window resizes.
   function modalChartView(node: HTMLDivElement) {
     const heightFor = () => Math.max(200, Math.round(window.innerHeight * 0.72))
-    modalChart = new uPlot(options(node.clientWidth, heightFor()), [[], [], []], node)
+    modalChart = new uPlot(options(node.clientWidth, heightFor(), (z) => (modalZoomed = z)), [[], [], []], node)
     draw()
     const onResize = () => modalChart?.setSize({ width: node.clientWidth, height: heightFor() })
     window.addEventListener('resize', onResize)
@@ -95,12 +107,13 @@
         window.removeEventListener('resize', onResize)
         modalChart?.destroy()
         modalChart = null
+        modalZoomed = false
       },
     }
   }
 
   onMount(() => {
-    chart = new uPlot(options(chartEl.clientWidth || 600), [[], [], []], chartEl)
+    chart = new uPlot(options(chartEl.clientWidth || 600, 280, (z) => (inlineZoomed = z)), [[], [], []], chartEl)
     ro = new ResizeObserver(() => {
       if (chart) chart.setSize({ width: chartEl.clientWidth, height: 280 })
     })
@@ -133,6 +146,9 @@
           </button>
         {/each}
       </div>
+      {#if inlineZoomed}
+        <button class="reset" onclick={() => resetXZoom(chart)} title="Reset zoom to full range">Reset zoom</button>
+      {/if}
       <button class="expand" onclick={() => (expanded = true)} aria-label="Expand chart" title="Expand chart">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M16 21h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
@@ -150,12 +166,17 @@
 
 {#if expanded}
   <ChartModal title="Live latency" onClose={() => (expanded = false)}>
-    <div class="toggle" role="group" aria-label="Percentile" slot="controls">
-      {#each metrics as m (m.key)}
-        <button class="seg" class:active={metric === m.key} onclick={() => (metric = m.key)}>
-          {m.label}
-        </button>
-      {/each}
+    <div class="modal-controls" slot="controls">
+      {#if modalZoomed}
+        <button class="reset" onclick={() => resetXZoom(modalChart)} title="Reset zoom to full range">Reset zoom</button>
+      {/if}
+      <div class="toggle" role="group" aria-label="Percentile">
+        {#each metrics as m (m.key)}
+          <button class="seg" class:active={metric === m.key} onclick={() => (metric = m.key)}>
+            {m.label}
+          </button>
+        {/each}
+      </div>
     </div>
     <div class="modal-chart" use:modalChartView></div>
   </ChartModal>
@@ -190,6 +211,16 @@
   }
   .expand:hover {
     color: var(--text);
+  }
+  .reset {
+    padding: 4px 10px;
+    font-size: 0.78rem;
+    white-space: nowrap;
+  }
+  .modal-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
   }
   .modal-chart {
     width: 100%;
