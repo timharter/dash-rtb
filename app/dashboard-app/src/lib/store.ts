@@ -405,18 +405,47 @@ function summarize(r: CompletionReport): TrialSummary {
   }
 }
 
-async function launchTrial(durationSec: number): Promise<void> {
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/** True when a run-state reflects a launch rejected because the previous run's
+ *  jobs are still present (the "a run is already in progress" guard). */
+function launchBlocked(s: RunState): boolean {
+  return ENVS.some(
+    (e) => s.environments[e]?.status === 'failed' && /in progress/i.test(s.environments[e]?.error ?? ''),
+  )
+}
+
+/**
+ * Starts the next trial. A just-finished load-generator job stays "active" for
+ * a few seconds after it reports, so back-to-back launches can hit the backend
+ * "run already in progress" guard. We let the previous job finish (settleFirst)
+ * and retry while a launch is still blocked, rather than failing the sequence.
+ */
+async function startNextTrial(durationSec: number, settleFirst: boolean): Promise<void> {
   actionError.set(null)
   try {
-    const res = await post('run', { mode: 'both', duration: durationToGo(durationSec) })
-    if (!res.ok) throw new Error(await errorText(res, 'Failed to start trial'))
-    const state = (await res.json()) as RunState
-    autoCurrentRunId = state.run_id
-    if (state.run_id && state.run_id !== lastRunID) {
-      lastRunID = state.run_id
-      clearEnvs(envsForMode(state.mode))
+    if (settleFirst) await delay(6000) // let the previous trial's job finish
+    for (let attempt = 0; ; attempt++) {
+      if (!get(autoTrials)?.active) return
+      const res = await post('run', { mode: 'both', duration: durationToGo(durationSec) })
+      if (!res.ok) throw new Error(await errorText(res, 'Failed to start trial'))
+      const state = (await res.json()) as RunState
+      if (!launchBlocked(state)) {
+        autoCurrentRunId = state.run_id
+        if (state.run_id && state.run_id !== lastRunID) {
+          lastRunID = state.run_id
+          clearEnvs(envsForMode(state.mode))
+        }
+        runState.set(state)
+        return
+      }
+      if (attempt >= 4) {
+        throw new Error('previous run is still terminating — could not start the next trial')
+      }
+      await delay(5000) // wait for k8s to finish tearing the previous job down
     }
-    runState.set(state)
   } catch (err) {
     actionError.set(messageOf(err))
     autoTrials.update((a) => (a ? { ...a, active: false, phase: 'error' } : a))
@@ -431,7 +460,7 @@ export async function startAutoTrials(
   autoCurrentRunId = null
   autoRecordedRunId = null
   autoTrials.set({ active: true, total: count, completed: 0, durationSec, phase: 'running' })
-  await launchTrial(durationSec)
+  await startNextTrial(durationSec, false)
 }
 
 export async function stopAutoTrials(): Promise<void> {
@@ -469,10 +498,7 @@ function maybeAdvanceTrials(): void {
   const completed = a.completed + 1
   if (completed < a.total) {
     autoTrials.set({ ...a, completed })
-    // brief beat so the completed trial registers before the next run clears it
-    setTimeout(() => {
-      if (get(autoTrials)?.active) void launchTrial(a.durationSec)
-    }, 1000)
+    void startNextTrial(a.durationSec, true)
   } else {
     autoTrials.set({ ...a, completed, active: false, phase: 'done' })
   }
