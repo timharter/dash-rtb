@@ -68,33 +68,45 @@
   const GAUGE_BASES = new Set(['bidder_bid_request_active_number'])
 
   /**
-   * Sums bidder_* series by base name and tallies the bidder's own up targets.
-   * When a baseline is present (captured at run start), counter series are shown
-   * as current − baseline so the panel reflects the current run rather than the
-   * monotonic since-pod-start totals. Gauges are passed through unchanged.
+   * Sums bidder_* series by base metric name across pods. Aggregating by base
+   * name is order-independent, so the non-deterministic label ordering in the
+   * per-series keys (Go map iteration) does not matter.
+   */
+  function sumBidderByBase(metrics: Record<string, number>): Record<string, number> {
+    const sums: Record<string, number> = {}
+    for (const [key, val] of Object.entries(metrics)) {
+      if (typeof val !== 'number') continue
+      const base = baseName(key)
+      if (base.startsWith('bidder_')) sums[base] = (sums[base] ?? 0) + val
+    }
+    return sums
+  }
+
+  /**
+   * Aggregates the current sample and computes per-run deltas. Counters are
+   * summed across pods by base name *before* subtracting the baseline — earlier
+   * we subtracted per series key, but the keys' label ordering is random per
+   * sample, so a mismatched key made the delta collapse to 0 (numbers ticking
+   * up then reverting). Base-name subtraction is stable. Gauges pass through raw.
    */
   function aggregate(msg: BackendHealthMessage, baseline: Record<string, number> | null): Aggregate {
+    const current = sumBidderByBase(msg.metrics)
+    const base = baseline ? sumBidderByBase(baseline) : null
+
     const sums: Record<string, number> = {}
+    for (const [b, v] of Object.entries(current)) {
+      sums[b] = base && !GAUGE_BASES.has(b) ? Math.max(0, v - (base[b] ?? 0)) : v
+    }
+
+    // Bidder scrape-target up/down (a gauge) from the current sample only; ignore
+    // the cluster-wide up series (kubelet, coredns, apiserver, node-exporter).
     let upTotal = 0
     let upReady = 0
     for (const [key, val] of Object.entries(msg.metrics)) {
       if (typeof val !== 'number') continue
-      const base = baseName(key)
-      if (base === 'up') {
-        // Only the bidder's own scrape targets reflect backend health; ignore
-        // the cluster-wide up series (kubelet, coredns, apiserver, node-exporter).
-        if (key.includes('bidder')) {
-          upTotal++
-          if (val >= 1) upReady++
-        }
-        continue
-      }
-      if (base.startsWith('bidder_')) {
-        // Subtract the per-series baseline for counters; a series missing from
-        // the baseline (new/restarted pod) contributes 0 until it grows again.
-        const v =
-          baseline && !GAUGE_BASES.has(base) ? Math.max(0, val - (baseline[key] ?? val)) : val
-        sums[base] = (sums[base] ?? 0) + v
+      if (baseName(key) === 'up' && key.includes('bidder')) {
+        upTotal++
+        if (val >= 1) upReady++
       }
     }
     return { sums, upTotal, upReady }
