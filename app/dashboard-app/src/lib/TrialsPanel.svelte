@@ -12,12 +12,13 @@
     stdDevOf,
     TRIAL_COUNT,
     TRIAL_DURATION_SEC,
+    type TrialSummary,
   } from './store'
-  import { ENVS, ENV_TOKENS, type RtbEnv } from './contract'
+  import { ENVS, ENV_TOKENS } from './contract'
 
   type LatKey = 'p50' | 'p95' | 'p99'
 
-  const rows: { key: LatKey; label: string }[] = [
+  const latRows: { key: LatKey; label: string }[] = [
     { key: 'p50', label: 'p50 latency (ms)' },
     { key: 'p95', label: 'p95 latency (ms)' },
     { key: 'p99', label: 'p99 latency (ms)' },
@@ -30,30 +31,42 @@
   $: hasResults = n > 0
   $: durLabel = `${Math.round(TRIAL_DURATION_SEC / 60)}m`
 
-  function latAgg(env: RtbEnv, key: LatKey): { mean: number; sd: number } {
-    const xs = $trials[env].map((t) => t[key])
-    return { mean: meanOf(xs), sd: stdDevOf(xs) }
+  function aggOf(xs: TrialSummary[], key: keyof TrialSummary): { mean: number; sd: number } {
+    const vals = xs.map((t) => t[key])
+    return { mean: meanOf(vals), sd: stdDevOf(vals) }
   }
 
-  function latCell(env: RtbEnv, key: LatKey): string {
-    const a = latAgg(env, key)
+  function latFmt(a: { mean: number; sd: number }): string {
     return `${a.mean.toFixed(2)} ± ${a.sd.toFixed(2)}`
   }
 
-  // RTB Fabric vs NLB mean delta for a latency metric (negative = Fabric lower).
-  function deltaPct(key: LatKey): { text: string; dir: 'better' | 'worse' | 'neutral' } {
-    const nlb = latAgg('nlb', key).mean
-    const rtbf = latAgg('rtbfabric', key).mean
-    if (!nlb) return { text: '—', dir: 'neutral' }
-    const pct = ((nlb - rtbf) / nlb) * 100
-    const dir = pct > 1 ? 'better' : pct < -1 ? 'worse' : 'neutral'
-    const sign = pct >= 0 ? '−' : '+'
-    return { text: `${sign}${Math.abs(pct).toFixed(1)}%`, dir }
+  function successFmt(xs: TrialSummary[]): string {
+    const a = aggOf(xs, 'success')
+    return `${(a.mean * 100).toFixed(3)}% ± ${(a.sd * 100).toFixed(3)}`
   }
 
-  function successCell(env: RtbEnv): string {
-    const xs = $trials[env].map((t) => t.success * 100)
-    return `${meanOf(xs).toFixed(3)}% ± ${stdDevOf(xs).toFixed(3)}`
+  // RTB Fabric vs NLB mean delta for a latency metric (negative = Fabric lower).
+  function deltaOf(
+    nlbMean: number,
+    rtbfMean: number,
+  ): { text: string; dir: 'better' | 'worse' | 'neutral' } {
+    if (!nlbMean) return { text: '—', dir: 'neutral' }
+    const pct = ((nlbMean - rtbfMean) / nlbMean) * 100
+    const dir = pct > 1 ? 'better' : pct < -1 ? 'worse' : 'neutral'
+    return { text: `${pct >= 0 ? '−' : '+'}${Math.abs(pct).toFixed(1)}%`, dir }
+  }
+
+  // Reactive on $trials so the cells refresh as trials accumulate. (A plain
+  // function reading $trials in the template would not re-run on store change.)
+  $: view = {
+    rows: latRows.map((r) => {
+      const nlb = aggOf($trials.nlb, r.key)
+      const rtbf = aggOf($trials.rtbfabric, r.key)
+      const d = deltaOf(nlb.mean, rtbf.mean)
+      return { label: r.label, nlb: latFmt(nlb), rtbfabric: latFmt(rtbf), delta: d.text, dir: d.dir }
+    }),
+    successNlb: successFmt($trials.nlb),
+    successRtbfabric: successFmt($trials.rtbfabric),
   }
 </script>
 
@@ -86,12 +99,7 @@
     </div>
   </div>
 
-  {#if !hasResults && !active}
-    <div class="idle-state">
-      Runs {TRIAL_COUNT} simultaneous {durLabel} trials back-to-back and aggregates p50/p95/p99 so
-      run-to-run variance is visible. Verify configuration first.
-    </div>
-  {:else}
+  {#if hasResults}
     <div class="t-table">
       <div class="trow thead">
         <span class="tlabel">{n} trial{n === 1 ? '' : 's'}{active ? ' so far' : ''}</span>
@@ -106,13 +114,13 @@
         </div>
       </div>
 
-      {#each rows as r (r.key)}
+      {#each view.rows as row (row.label)}
         <div class="trow">
-          <span class="tlabel">{r.label}</span>
+          <span class="tlabel">{row.label}</span>
           <div class="tvals">
-            <span class="tval">{latCell('nlb', r.key)}</span>
-            <span class="tval">{latCell('rtbfabric', r.key)}</span>
-            <span class="tval delta {deltaPct(r.key).dir}">{deltaPct(r.key).text}</span>
+            <span class="tval">{row.nlb}</span>
+            <span class="tval">{row.rtbfabric}</span>
+            <span class="tval delta {row.dir}">{row.delta}</span>
           </div>
         </div>
       {/each}
@@ -120,11 +128,20 @@
       <div class="trow">
         <span class="tlabel">Success rate</span>
         <div class="tvals">
-          <span class="tval">{successCell('nlb')}</span>
-          <span class="tval">{successCell('rtbfabric')}</span>
+          <span class="tval">{view.successNlb}</span>
+          <span class="tval">{view.successRtbfabric}</span>
           <span class="tval delta neutral">—</span>
         </div>
       </div>
+    </div>
+  {:else if active}
+    <div class="idle-state">
+      Running trial 1 of {$autoTrials?.total}… results appear here as each {durLabel} trial completes.
+    </div>
+  {:else}
+    <div class="idle-state">
+      Runs {TRIAL_COUNT} simultaneous {durLabel} trials back-to-back and aggregates p50/p95/p99 so
+      run-to-run variance is visible. Verify configuration first.
     </div>
   {/if}
 </section>
