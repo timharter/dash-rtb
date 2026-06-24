@@ -1,25 +1,40 @@
 <script lang="ts">
-  import { tailStats, finals, runState } from './store'
+  import { tailStats, finals, runState, type TailStats } from './store'
   import { ENVS, ENV_TOKENS, HIGH_LATENCY_MS, formatInt, formatMs, type RtbEnv } from './contract'
+
+  type TailKey = 'errors' | 'timeouts' | 'overThreshold' | 'max'
+
+  const ROWS: { key: TailKey; label: string }[] = [
+    { key: 'errors', label: 'Errors (non-2xx)' },
+    { key: 'timeouts', label: 'Timeouts (504)' },
+    { key: 'overThreshold', label: `Requests ≥ ${HIGH_LATENCY_MS} ms` },
+    { key: 'max', label: 'Max latency' },
+  ]
+
+  function cellText(s: TailStats, key: TailKey): string {
+    if (!s.hasData) return '—'
+    return key === 'max' ? formatMs(s.max) : formatInt(s[key])
+  }
 
   // Per-environment tail stats: the authoritative completion report once an
   // environment finishes, otherwise the live accumulation (see store.tailStats).
   $: view = $tailStats
-  $: any = view.nlb.hasData || view.rtbfabric.hasData
+  $: anyData = view.nlb.hasData || view.rtbfabric.hasData
   $: hasReports = Boolean($finals.nlb || $finals.rtbfabric)
 
-  const rows = [
-    { key: 'errors' as const, label: 'Errors (non-2xx)' },
-    { key: 'timeouts' as const, label: 'Timeouts (504)' },
-    { key: 'overThreshold' as const, label: `Requests ≥ ${HIGH_LATENCY_MS} ms` },
-    { key: 'max' as const, label: 'Max latency' },
-  ]
-
-  function cell(env: RtbEnv, key: (typeof rows)[number]['key']): string {
-    const s = view[env]
-    if (!s.hasData) return '—'
-    return key === 'max' ? formatMs(s.max) : formatInt(s[key])
-  }
+  // Precompute the table reactively from $tailStats. The cells MUST be derived
+  // here rather than via a function called in the markup: a function reading
+  // $tailStats inside the template is not re-run when the store changes, which
+  // froze the cells at whatever subset of envs had data on first render (the
+  // "only one column updates" bug).
+  $: tableRows = ROWS.map((r) => ({
+    label: r.label,
+    cells: ENVS.map((env) => ({
+      env,
+      text: cellText(view[env], r.key),
+      warn: r.key !== 'max' && view[env].hasData && (view[env][r.key] as number) > 0,
+    })),
+  }))
 
   // Offline analysis: a raw completion report exists per environment once that
   // environment finishes. Download serializes the exact payload the
@@ -60,7 +75,7 @@
       </div>
     {/if}
   </div>
-  {#if !any}
+  {#if !anyData}
     <div class="idle-state">Tail and error metrics appear once a run is producing samples.</div>
   {:else}
     <div class="tail-table">
@@ -77,18 +92,13 @@
       </div>
 
       <div class="tbody">
-        {#each rows as r (r.key)}
+        {#each tableRows as r (r.label)}
           <div class="trow">
             <span class="tlabel">{r.label}</span>
             <span class="tfill"></span>
             <div class="tvals">
-              {#each ENVS as env (env)}
-                <span
-                  class="tval"
-                  class:warn={r.key !== 'max' && view[env].hasData && view[env][r.key] > 0}
-                >
-                  {cell(env, r.key)}
-                </span>
+              {#each r.cells as c (c.env)}
+                <span class="tval" class:warn={c.warn}>{c.text}</span>
               {/each}
             </div>
           </div>
