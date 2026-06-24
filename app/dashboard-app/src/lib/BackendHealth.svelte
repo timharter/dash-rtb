@@ -1,6 +1,6 @@
 <script lang="ts">
   import { backendHealth } from './store'
-  import { ENVS, ENV_TOKENS, formatInt, type BackendHealthMessage } from './contract'
+  import { ENVS, formatInt, type BackendHealthMessage, type RtbEnv } from './contract'
 
   // Backend-health is optional supporting context sourced from metric-watcher
   // (bidder-side Prometheus). It is intentionally secondary to the client-
@@ -13,7 +13,21 @@
   // small, stable set of totals that update in place — rather than a churning
   // list of per-series rows that never settle.
 
-  $: envsWithData = ENVS.filter((e) => $backendHealth[e])
+  // The bidder is a single shared backend across both paths, and metric-watcher
+  // reports bidder-wide Prometheus totals (summed across bidder pods), not
+  // per-path figures. During a simultaneous run the hub tags the same metrics
+  // for both environments, which previously rendered two identical cards. Since
+  // the metrics are not per-path, collapse to one shared card using the most
+  // recent payload.
+  $: bidderHealth = pickShared($backendHealth)
+
+  function pickShared(
+    bh: Partial<Record<RtbEnv, BackendHealthMessage>>,
+  ): BackendHealthMessage | null {
+    const msgs = ENVS.map((e) => bh[e]).filter((m): m is BackendHealthMessage => Boolean(m))
+    if (msgs.length === 0) return null
+    return msgs.reduce((a, b) => ((a.timestamp ?? '') >= (b.timestamp ?? '') ? a : b))
+  }
 
   // Friendly labels for the known bidder metric-watcher series.
   const LABELS: Record<string, string> = {
@@ -123,48 +137,37 @@
     </a>
   </div>
 
-  {#if envsWithData.length === 0}
+  {#if !bidderHealth}
     <div class="idle-state">
       No bidder metrics yet. This optional panel populates when metric-watcher reports.
     </div>
   {:else}
+    {@const agg = aggregate(bidderHealth)}
     <div class="bh-grid">
-      {#each envsWithData as env (env)}
-        {@const agg = aggregate($backendHealth[env] as BackendHealthMessage)}
-        <div class="bh-card">
-          <div class="bh-card-head">
-            <span class="env-chip"><span class="env-swatch {env}"></span>{ENV_TOKENS[env].label}</span>
-            {#if upStatus(agg) !== null}
-              <span class="up-badge {upStatus(agg) ? 'up' : 'down'}">
-                target {upStatus(agg) ? 'up' : 'down'}
-              </span>
-            {/if}
-          </div>
-          {#if noBidRate(agg)}
-            <div class="bh-rows">
-              <div class="bh-row highlight">
-                <span class="bh-label">No-bid rate</span>
-                <span class="bh-value">{noBidRate(agg)}</span>
-              </div>
-              {#each rows(agg) as row (row.label)}
-                <div class="bh-row">
-                  <span class="bh-label">{row.label}</span>
-                  <span class="bh-value">{row.value}</span>
-                </div>
-              {/each}
-            </div>
-          {:else}
-            <div class="bh-rows">
-              {#each rows(agg) as row (row.label)}
-                <div class="bh-row">
-                  <span class="bh-label">{row.label}</span>
-                  <span class="bh-value">{row.value}</span>
-                </div>
-              {/each}
-            </div>
+      <div class="bh-card">
+        <div class="bh-card-head">
+          <span class="bidder-chip">Bidder</span>
+          {#if upStatus(agg) !== null}
+            <span class="up-badge {upStatus(agg) ? 'up' : 'down'}">
+              target {upStatus(agg) ? 'up' : 'down'}
+            </span>
           {/if}
         </div>
-      {/each}
+        <div class="bh-rows">
+          {#if noBidRate(agg)}
+            <div class="bh-row highlight">
+              <span class="bh-label">No-bid rate</span>
+              <span class="bh-value">{noBidRate(agg)}</span>
+            </div>
+          {/if}
+          {#each rows(agg) as row (row.label)}
+            <div class="bh-row">
+              <span class="bh-label">{row.label}</span>
+              <span class="bh-value">{row.value}</span>
+            </div>
+          {/each}
+        </div>
+      </div>
     </div>
   {/if}
 </section>
@@ -228,6 +231,10 @@
     align-items: center;
     justify-content: space-between;
     margin-bottom: 8px;
+  }
+  .bidder-chip {
+    font-weight: 600;
+    font-size: 0.9rem;
   }
   .up-badge {
     font-size: 0.7rem;
