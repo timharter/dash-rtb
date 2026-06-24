@@ -84,8 +84,68 @@ export interface TrialState {
 export const TRIAL_COUNT = 5
 export const TRIAL_DURATION_SEC = 120
 
-export const trials = writable<Record<RtbEnv, TrialSummary[]>>({ nlb: [], rtbfabric: [] })
-export const autoTrials = writable<TrialState | null>(null)
+// Trials accumulate entirely client-side — the hub tracks individual runs, not
+// the multi-run aggregate — so unlike the charts they have nothing to replay
+// from the server on reload. We persist them to sessionStorage and rehydrate on
+// load so a refresh keeps the results table. sessionStorage (not localStorage)
+// scopes them to the tab/session: a reload keeps them, closing the tab clears
+// them.
+const TRIALS_KEY = 'rtb-dash.trials.v1'
+
+interface PersistedTrials {
+  trials: Record<RtbEnv, TrialSummary[]>
+  autoTrials: TrialState | null
+}
+
+function loadPersistedTrials(): PersistedTrials | null {
+  try {
+    const raw = sessionStorage.getItem(TRIALS_KEY)
+    if (!raw) return null
+    const p = JSON.parse(raw) as PersistedTrials
+    const t = p.trials
+    return {
+      trials: {
+        nlb: Array.isArray(t?.nlb) ? t.nlb : [],
+        rtbfabric: Array.isArray(t?.rtbfabric) ? t.rtbfabric : [],
+      },
+      // A sequence that was mid-flight cannot resume after reload — its
+      // client-side orchestration (timers, current run id) is gone — so restore
+      // it as inactive rather than pretending it is still running.
+      autoTrials: p.autoTrials
+        ? {
+            ...p.autoTrials,
+            active: false,
+            phase: p.autoTrials.active ? 'stopped' : p.autoTrials.phase,
+          }
+        : null,
+    }
+  } catch {
+    return null
+  }
+}
+
+const persistedTrials = typeof sessionStorage !== 'undefined' ? loadPersistedTrials() : null
+
+export const trials = writable<Record<RtbEnv, TrialSummary[]>>(
+  persistedTrials?.trials ?? { nlb: [], rtbfabric: [] },
+)
+export const autoTrials = writable<TrialState | null>(persistedTrials?.autoTrials ?? null)
+
+/** Persists the trial results + orchestration state so a reload keeps them. */
+function persistTrials(): void {
+  if (typeof sessionStorage === 'undefined') return
+  try {
+    const payload: PersistedTrials = { trials: get(trials), autoTrials: get(autoTrials) }
+    sessionStorage.setItem(TRIALS_KEY, JSON.stringify(payload))
+  } catch {
+    // storage unavailable or over quota — non-fatal; trials just won't persist.
+  }
+}
+
+// Persist on every change. The immediate fire on subscribe re-saves the
+// rehydrated value, which is harmless.
+trials.subscribe(persistTrials)
+autoTrials.subscribe(persistTrials)
 
 /**
  * Server-side fixed load parameters (rate/devices/workers). Seeded with the
