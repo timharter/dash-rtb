@@ -62,7 +62,12 @@
     return ''
   }
 
-  function reasonFor(env: RtbEnv): string {
+  // These are reactive ($:) so the template re-evaluates them when $readiness
+  // changes after a verify. As plain functions they were computed once at mount
+  // (readiness still null) and never refreshed by Svelte's dirty tracking —
+  // which left the reason text stale and the detected endpoint hidden, even
+  // though the status pill (a reactive $: value) updated correctly.
+  $: reasonFor = (env: RtbEnv): string => {
     const r = $readiness?.reasons?.[env]
     if (r) return r
     return ready(env) ? 'Ready to run' : 'Not ready'
@@ -71,9 +76,7 @@
   // The detected bid-request endpoint for an environment, surfaced after verify
   // so the user can confirm the right RTB Fabric link / NLB was discovered
   // before launching a load test.
-  function endpointFor(env: RtbEnv): string {
-    return $readiness?.endpoints?.[env] ?? ''
-  }
+  $: endpointFor = (env: RtbEnv): string => $readiness?.endpoints?.[env] ?? ''
 
   const modeLabels: Record<string, string> = {
     nlb: 'NLB only',
