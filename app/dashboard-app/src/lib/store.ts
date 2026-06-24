@@ -125,13 +125,34 @@ function ingestInterval(snap: IntervalSnapshot): void {
   dirty = true
 }
 
-function clearRun(): void {
-  for (const env of ENVS) {
+function envsForMode(mode: string): RtbEnv[] {
+  if (mode === 'nlb') return ['nlb']
+  if (mode === 'rtbfabric') return ['rtbfabric']
+  return [...ENVS] // "both" or unknown -> clear all
+}
+
+/**
+ * Clears only the given environments' buffers and derived state, leaving the
+ * others intact. Re-running one path (e.g. RTB Fabric) therefore resets just
+ * that path's visuals while the other path's last run stays on screen for
+ * comparison; the backend retains the other path too, so a reconnect replays
+ * both. A simultaneous ("both") run passes every environment and clears all.
+ */
+function clearEnvs(envs: RtbEnv[]): void {
+  for (const env of envs) {
     intervals[env].clear()
     cache[env] = emptyCache()
   }
-  latest.set({})
-  finals.set({})
+  latest.update((l) => {
+    const next = { ...l }
+    for (const env of envs) delete next[env]
+    return next
+  })
+  finals.update((f) => {
+    const next = { ...f }
+    for (const env of envs) delete next[env]
+    return next
+  })
   dirty = true
 }
 
@@ -211,7 +232,7 @@ export function connectStream(): void {
     if (!state) return
     if (state.run_id && state.run_id !== lastRunID) {
       lastRunID = state.run_id
-      clearRun()
+      clearEnvs(envsForMode(state.mode))
     }
     runState.set(state)
   })
@@ -299,7 +320,7 @@ export async function runTest(mode: RunMode, durationSeconds: number): Promise<v
     const state = (await res.json()) as RunState
     if (state.run_id && state.run_id !== lastRunID) {
       lastRunID = state.run_id
-      clearRun()
+      clearEnvs(envsForMode(state.mode))
     }
     runState.set(state)
   } catch (err) {
