@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { backendHealth } from './store'
+  import { backendHealth, healthBaseline } from './store'
   import { ENVS, formatInt, type BackendHealthMessage, type RtbEnv } from './contract'
 
   // Backend-health is optional supporting context sourced from metric-watcher
@@ -63,8 +63,17 @@
     upReady: number
   }
 
-  /** Sums bidder_* series by base name and tallies the bidder's own up targets. */
-  function aggregate(msg: BackendHealthMessage): Aggregate {
+  // In-flight gauge (not a monotonic counter): show the live value, never a
+  // delta. Everything else under bidder_* is a cumulative counter.
+  const GAUGE_BASES = new Set(['bidder_bid_request_active_number'])
+
+  /**
+   * Sums bidder_* series by base name and tallies the bidder's own up targets.
+   * When a baseline is present (captured at run start), counter series are shown
+   * as current − baseline so the panel reflects the current run rather than the
+   * monotonic since-pod-start totals. Gauges are passed through unchanged.
+   */
+  function aggregate(msg: BackendHealthMessage, baseline: Record<string, number> | null): Aggregate {
     const sums: Record<string, number> = {}
     let upTotal = 0
     let upReady = 0
@@ -81,7 +90,11 @@
         continue
       }
       if (base.startsWith('bidder_')) {
-        sums[base] = (sums[base] ?? 0) + val
+        // Subtract the per-series baseline for counters; a series missing from
+        // the baseline (new/restarted pod) contributes 0 until it grows again.
+        const v =
+          baseline && !GAUGE_BASES.has(base) ? Math.max(0, val - (baseline[key] ?? val)) : val
+        sums[base] = (sums[base] ?? 0) + v
       }
     }
     return { sums, upTotal, upReady }
@@ -142,16 +155,19 @@
       No bidder metrics yet. This optional panel populates when metric-watcher reports.
     </div>
   {:else}
-    {@const agg = aggregate(bidderHealth)}
+    {@const agg = aggregate(bidderHealth, $healthBaseline)}
     <div class="bh-grid">
       <div class="bh-card">
         <div class="bh-card-head">
           <span class="bidder-chip">Bidder</span>
-          {#if upStatus(agg) !== null}
-            <span class="up-badge {upStatus(agg) ? 'up' : 'down'}">
-              target {upStatus(agg) ? 'up' : 'down'}
-            </span>
-          {/if}
+          <div class="bh-card-head-right">
+            <span class="scope faint">{$healthBaseline ? 'since run start' : 'cumulative'}</span>
+            {#if upStatus(agg) !== null}
+              <span class="up-badge {upStatus(agg) ? 'up' : 'down'}">
+                target {upStatus(agg) ? 'up' : 'down'}
+              </span>
+            {/if}
+          </div>
         </div>
         <div class="bh-rows">
           {#if noBidRate(agg)}
@@ -231,6 +247,16 @@
     align-items: center;
     justify-content: space-between;
     margin-bottom: 8px;
+  }
+  .bh-card-head-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .scope {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
   }
   .bidder-chip {
     font-weight: 600;

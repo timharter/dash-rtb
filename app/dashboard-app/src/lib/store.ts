@@ -51,6 +51,13 @@ export const runState = writable<RunState | null>(null)
 export const backendHealth = writable<Partial<Record<RtbEnv, BackendHealthMessage>>>({})
 export const finals = writable<Partial<Record<RtbEnv, CompletionReport>>>({})
 
+// Bidder Prometheus counters are monotonic (cumulative since pod start), so the
+// raw totals only ever grow across runs. We snapshot them when a run starts and
+// BackendHealth renders current − baseline — i.e. activity for the current run,
+// the same idea as Prometheus increase()/rate() — without mutating the counters
+// (resetting a counter would break rate()/Grafana and needs a pod restart).
+export const healthBaseline = writable<Record<string, number> | null>(null)
+
 // Auto-trials: per-environment summaries accumulated across a sequence of runs,
 // plus the orchestration state. Used to show mean ± std dev so run-to-run
 // variance is visible (the representative comparison). Orchestration lives in
@@ -133,6 +140,9 @@ const cache: Record<RtbEnv, EnvCache> = {
 }
 
 let lastRunID: string | null = null
+// When a run starts before any bidder-health sample has arrived, defer baseline
+// capture to the first subsequent backend-health message (see connectStream).
+let awaitingBaseline = false
 let dirty = false
 let lastFlush = 0
 let rafHandle: number | null = null
@@ -262,6 +272,7 @@ export function connectStream(): void {
     if (state.run_id && state.run_id !== lastRunID) {
       lastRunID = state.run_id
       clearEnvs(envsForMode(state.mode))
+      captureHealthBaseline()
     }
     runState.set(state)
     maybeAdvanceTrials()
@@ -284,6 +295,10 @@ export function connectStream(): void {
     const msg = safeParse<BackendHealthMessage>((e as MessageEvent).data)
     if (msg && msg['rtb-env']) {
       backendHealth.update((b) => ({ ...b, [msg['rtb-env']]: msg }))
+      if (awaitingBaseline) {
+        healthBaseline.set({ ...msg.metrics })
+        awaitingBaseline = false
+      }
     }
   })
 
@@ -312,6 +327,31 @@ function safeParse<T>(data: string): T | null {
     return JSON.parse(data) as T
   } catch {
     return null
+  }
+}
+
+/** Most recent bidder-health sample across environments (metric-watcher reports
+ *  bidder-wide totals, tagged per env; the newest one wins). */
+function latestHealth(): BackendHealthMessage | null {
+  const bh = get(backendHealth)
+  const msgs = ENVS.map((e) => bh[e]).filter((m): m is BackendHealthMessage => Boolean(m))
+  if (msgs.length === 0) return null
+  return msgs.reduce((a, b) => ((a.timestamp ?? '') >= (b.timestamp ?? '') ? a : b))
+}
+
+/**
+ * Snapshots the bidder counters as the per-run zero point. Uses the latest
+ * pre-run sample when available; otherwise defers to the first backend-health
+ * message after the run starts (awaitingBaseline).
+ */
+function captureHealthBaseline(): void {
+  const latest = latestHealth()
+  if (latest) {
+    healthBaseline.set({ ...latest.metrics })
+    awaitingBaseline = false
+  } else {
+    healthBaseline.set(null)
+    awaitingBaseline = true
   }
 }
 
@@ -352,6 +392,7 @@ export async function runTest(mode: RunMode, durationSeconds: number): Promise<v
     if (state.run_id && state.run_id !== lastRunID) {
       lastRunID = state.run_id
       clearEnvs(envsForMode(state.mode))
+      captureHealthBaseline()
     }
     runState.set(state)
   } catch (err) {
@@ -437,6 +478,7 @@ async function startNextTrial(durationSec: number, settleFirst: boolean): Promis
         if (state.run_id && state.run_id !== lastRunID) {
           lastRunID = state.run_id
           clearEnvs(envsForMode(state.mode))
+          captureHealthBaseline()
         }
         runState.set(state)
         return
