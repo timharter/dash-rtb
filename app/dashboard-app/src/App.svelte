@@ -15,6 +15,7 @@
   import LatencyChart from './lib/LatencyChart.svelte'
   import CdfChart from './lib/CdfChart.svelte'
   import TailPanel from './lib/TailPanel.svelte'
+  import CostPanel from './lib/CostPanel.svelte'
   import BackendHealth from './lib/BackendHealth.svelte'
   import Terminal from './lib/Terminal.svelte'
 
@@ -77,6 +78,8 @@
   </section>
 
   <TailPanel />
+
+  <CostPanel />
 
   <BackendHealth />
 

@@ -83,6 +83,12 @@ export interface CompletionReport {
   requests: number
   status_codes: Record<string, number>
   buckets?: Record<string, number>
+  /** Run wall-clock in nanoseconds (load-generator EnhancedReport.duration). */
+  duration?: number
+  /** Response bytes (DSP→requester). total/mean are bytes. */
+  bytes_in?: { mean: number; total: number }
+  /** Request bytes (requester→DSP). total/mean are bytes. */
+  bytes_out?: { mean: number; total: number }
 }
 
 /** Minimal per-environment shape the KPI tiles render (satisfied by both a
