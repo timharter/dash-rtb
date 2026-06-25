@@ -16,7 +16,6 @@ import {
   SSE_CONFIG,
   addBuckets,
   buildCdf,
-  sampleCdf,
   unionSorted,
   durationToGo,
   FIXED_PARAMS,
@@ -645,18 +644,6 @@ export function getLatencySeries(metric: keyof LatencyPercentiles): SeriesData {
     for (const s of cache[env].sorted) byElapsed.set(s.elapsed_seconds, s.latencies_ms[metric])
     series[env] = x.map((t) => byElapsed.get(t) ?? null)
   }
-  return { x, series }
-}
-
-/** Builds overlaid CDF curves for both environments sampled onto a shared x grid. */
-export function getCdfData(): SeriesData {
-  const curves: Record<RtbEnv, CdfCurve> = {
-    nlb: buildCdf(cache.nlb.buckets),
-    rtbfabric: buildCdf(cache.rtbfabric.buckets),
-  }
-  const x = unionSorted(curves.nlb.x, curves.rtbfabric.x)
-  const series = {} as Record<RtbEnv, (number | null)[]>
-  for (const env of ENVS) series[env] = sampleCdf(curves[env], x)
   return { x, series }
 }
 

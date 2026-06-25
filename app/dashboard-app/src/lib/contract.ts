@@ -334,26 +334,6 @@ export function buildCdf(buckets: Record<string, number>): CdfCurve {
   return { x, y }
 }
 
-/**
- * Samples a monotonic step CDF onto a shared x grid so two environments with
- * different bucket edges can overlay on one axis. For each grid value the
- * sampled y is the cumulative percent at the largest curve point <= x, else 0.
- */
-export function sampleCdf(curve: CdfCurve, grid: number[]): (number | null)[] {
-  if (curve.x.length === 0) return grid.map(() => null)
-  const out: (number | null)[] = []
-  let i = 0
-  for (const gx of grid) {
-    while (i + 1 < curve.x.length && curve.x[i + 1] <= gx) i++
-    if (gx < curve.x[0]) {
-      out.push(0)
-    } else {
-      out.push(curve.y[i])
-    }
-  }
-  return out
-}
-
 /** Sorted union of two numeric arrays (deduplicated). */
 export function unionSorted(a: number[], b: number[]): number[] {
   const set = new Set<number>()
