@@ -15,4 +15,4 @@ commands:
   - id: test
     exec:
       component: dev
-      commandLine: "cd app/dashboard-app && npm run check"
+      commandLine: "cd app/dashboard-app && npm run check && npm test"

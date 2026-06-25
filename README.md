@@ -44,6 +44,7 @@ npm install
 # Point the dev proxy at a running dashboard service (default localhost:8080):
 DASH_DEV_BACKEND=http://localhost:8080 npm run dev   # http://localhost:5173/dash/
 npm run build                                        # svelte-check + vite build -> dist/
+npm test                                             # vitest (unit tests)
 ```
 
 A cloud dev environment is described by `devfile.yaml` (install/build/test

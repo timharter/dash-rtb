@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 
 // The dashboard is served by the Go service under /dash/ and embedded into the
@@ -22,5 +22,10 @@ export default defineConfig({
       '/ingest': { target: backend, changeOrigin: true },
       '/healthz': { target: backend, changeOrigin: true },
     },
+  },
+  // Unit tests cover the pure data-shaping/formatting helpers (no DOM needed).
+  test: {
+    environment: 'node',
+    include: ['src/**/*.test.ts'],
   },
 })
