@@ -308,26 +308,54 @@ function stopFlushLoop(): void {
 
 const apiPath = (p: string): string => `${import.meta.env.BASE_URL}${p}`
 
+// Staleness watchdog. EventSource only auto-reconnects on a transport-level
+// error/close; a stream that stays open but silently stops delivering (a stalled
+// proxy/LB) would otherwise leave the UI showing "Live" forever. While a run is
+// active we expect ~1 Hz live-metrics, so a longer silence means the stream has
+// stalled — force a reconnect. The idempotent elapsed-keyed buffers plus the
+// server's snapshot-on-connect replay make reconnecting safe (no double-count),
+// which is exactly what lets us recover transparently. We deliberately only
+// police silence during an active run: when idle the server legitimately sends
+// nothing, so a gap then is not a stall.
+const STALE_TIMEOUT_MS = 12_000 // max tolerated silence during an active run
+const STALE_CHECK_MS = 3_000 // how often the watchdog re-checks
+
 let source: EventSource | null = null
+let lastEventAt = 0
+let staleTimer: ReturnType<typeof setInterval> | null = null
 
-export function connectStream(): void {
-  if (source) return
-  scheduleFlushLoop()
+/** Records that the stream is alive (any event, or a fresh connect). */
+function markEvent(): void {
+  lastEventAt = Date.now()
+}
 
+/**
+ * Registers an SSE listener that (1) records stream liveness for the watchdog
+ * and (2) parses the JSON payload, invoking `handle` only on a valid message.
+ * Centralizing parse + liveness here keeps every event type covered.
+ */
+function listen<T>(es: EventSource, name: string, handle: (msg: T) => void): void {
+  es.addEventListener(name, (e) => {
+    markEvent()
+    const msg = safeParse<T>((e as MessageEvent).data)
+    if (msg) handle(msg)
+  })
+}
+
+function openSource(): void {
   const es = new EventSource(apiPath('stream'))
   source = es
+  markEvent() // baseline so the watchdog doesn't fire during initial connect
 
-  es.onopen = () => connection.set('open')
+  es.onopen = () => {
+    markEvent()
+    connection.set('open')
+  }
   es.onerror = () => connection.set('reconnecting') // EventSource auto-retries
 
-  es.addEventListener(SSE_LIVE_METRICS, (e) => {
-    const snap = safeParse<IntervalSnapshot>((e as MessageEvent).data)
-    if (snap) ingestInterval(snap)
-  })
+  listen<IntervalSnapshot>(es, SSE_LIVE_METRICS, (snap) => ingestInterval(snap))
 
-  es.addEventListener(SSE_RUN_STATE, (e) => {
-    const state = safeParse<RunState>((e as MessageEvent).data)
-    if (!state) return
+  listen<RunState>(es, SSE_RUN_STATE, (state) => {
     if (state.run_id && state.run_id !== lastRunID) {
       lastRunID = state.run_id
       clearEnvs(envsForMode(state.mode))
@@ -337,22 +365,17 @@ export function connectStream(): void {
     maybeAdvanceTrials()
   })
 
-  es.addEventListener(SSE_READINESS, (e) => {
-    const r = safeParse<ReadinessEvent>((e as MessageEvent).data)
-    if (r) readiness.set(r)
-  })
+  listen<ReadinessEvent>(es, SSE_READINESS, (r) => readiness.set(r))
 
-  es.addEventListener(SSE_REPORT, (e) => {
-    const report = safeParse<CompletionReport>((e as MessageEvent).data)
-    if (report && report['rtb-env']) {
+  listen<CompletionReport>(es, SSE_REPORT, (report) => {
+    if (report['rtb-env']) {
       finals.update((f) => ({ ...f, [report['rtb-env'] as RtbEnv]: report }))
       maybeAdvanceTrials()
     }
   })
 
-  es.addEventListener(SSE_BACKEND_HEALTH, (e) => {
-    const msg = safeParse<BackendHealthMessage>((e as MessageEvent).data)
-    if (msg && msg['rtb-env']) {
+  listen<BackendHealthMessage>(es, SSE_BACKEND_HEALTH, (msg) => {
+    if (msg['rtb-env']) {
       backendHealth.update((b) => ({ ...b, [msg['rtb-env']]: msg }))
       if (awaitingBaseline) {
         healthBaseline.set({ ...msg.metrics })
@@ -361,16 +384,49 @@ export function connectStream(): void {
     }
   })
 
-  es.addEventListener(SSE_CONFIG, (e) => {
-    const cfg = safeParse<Partial<FixedParams>>((e as MessageEvent).data)
-    if (cfg) {
-      fixedParams.update((prev) => ({
-        rate: typeof cfg.rate === 'number' ? cfg.rate : prev.rate,
-        devices: typeof cfg.devices === 'number' ? cfg.devices : prev.devices,
-        workers: typeof cfg.workers === 'number' ? cfg.workers : prev.workers,
-      }))
-    }
+  listen<Partial<FixedParams>>(es, SSE_CONFIG, (cfg) => {
+    fixedParams.update((prev) => ({
+      rate: typeof cfg.rate === 'number' ? cfg.rate : prev.rate,
+      devices: typeof cfg.devices === 'number' ? cfg.devices : prev.devices,
+      workers: typeof cfg.workers === 'number' ? cfg.workers : prev.workers,
+    }))
   })
+}
+
+/** Tears down the current EventSource and opens a fresh one (recovery path). */
+function reconnect(): void {
+  if (source) {
+    source.close()
+    source = null
+  }
+  openSource()
+}
+
+function startStaleWatch(): void {
+  if (staleTimer !== null) return
+  staleTimer = setInterval(() => {
+    if (!source || source.readyState !== EventSource.OPEN) return // already (re)connecting
+    if (!get(isRunning)) return // only expect ~1 Hz data during an active run
+    if (Date.now() - lastEventAt < STALE_TIMEOUT_MS) return
+    // Open but silent mid-run: the stream has stalled. Force a reconnect; the
+    // snapshot-on-connect replay restores the in-progress view.
+    connection.set('reconnecting')
+    reconnect()
+  }, STALE_CHECK_MS)
+}
+
+function stopStaleWatch(): void {
+  if (staleTimer !== null) {
+    clearInterval(staleTimer)
+    staleTimer = null
+  }
+}
+
+export function connectStream(): void {
+  if (source) return
+  scheduleFlushLoop()
+  openSource()
+  startStaleWatch()
 }
 
 export function disconnectStream(): void {
@@ -378,6 +434,7 @@ export function disconnectStream(): void {
     source.close()
     source = null
   }
+  stopStaleWatch()
   stopFlushLoop()
 }
 
