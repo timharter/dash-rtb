@@ -46,5 +46,5 @@ DASH_DEV_BACKEND=http://localhost:8080 npm run dev   # http://localhost:5173/das
 npm run build                                        # svelte-check + vite build -> dist/
 ```
 
-The repo also ships a dev container (`Dockerfile`, `build_container.sh`,
-`run_container.sh`) that mounts `./app` and exposes the Vite dev port.
+A cloud dev environment is described by `devfile.yaml` (install/build/test
+commands).
